@@ -1,6 +1,7 @@
 Padaria Frontend
 
-Este é o frontend do sistema de entregas recorrentes para padarias. Ele foi desenvolvido em React (Vite) e consome a API REST do backend para exibir e gerenciar rotas, entregas, pagamentos e estatísticas de forma prática e organizada.
+Este é o frontend do sistema de entregas recorrentes para padarias.
+Ele foi desenvolvido em React (Vite) e consome a API REST do backend para exibir e gerenciar rotas, entregas, pagamentos e estatísticas de forma prática e organizada.
 
 Repositório do Backend
 
@@ -31,7 +32,17 @@ Exibe painel administrativo com estatísticas e relatórios
 
 Exibe painel do gerente com gestão de entregas, pagamentos e inadimplência
 
-Exibe painel do entregador com rota no mapa, entregas do dia, botão de concluir entrega, registrar pagamentos e relatar problemas
+Exibe painel do entregador com:
+
+rota no mapa
+
+entregas do dia
+
+botão de concluir entrega
+
+registrar pagamentos
+
+relatar problemas
 
 Consome a API REST do backend em tempo real
 
@@ -40,22 +51,70 @@ Estrutura pronta para dashboards e relatórios visuais
 Autenticação e segurança
 
 O frontend utiliza o token JWT fornecido pelo backend para autenticar o usuário.
+
 O token é armazenado em localStorage e enviado automaticamente no header Authorization em todas as requisições.
-
-Exemplo de header:
-
-Authorization: Bearer <seu_token>
 
 Comunicação com o backend
 
-O frontend consome os seguintes endpoints principais do backend:
+O frontend se comunica com o backend via API REST, recebendo e enviando dados em formato JSON.
 
-Método	Rota	Descrição
-POST	/login	Login de usuário e geração de token JWT
-GET	/entregas/hoje	Lista de entregas do dia
-PUT	/entregas/:id/concluir	Marcar entrega como concluída
-POST	/entregas/:id/pagamento	Registrar pagamento de uma entrega
-PUT	/entregas/:id/problema	Relatar problema em uma entrega
-GET	/analitico/inadimplentes	Listar clientes inadimplentes
+Como rodar o projeto localmente
 
-(Demais rotas estão disponíveis no backend.)
+Clone este repositório:
+
+git clone https://github.com/Luizbragga/padaria-frontend.git
+
+
+Acesse a pasta:
+
+cd padaria-frontend
+
+
+Instale as dependências:
+
+npm install
+
+
+Configure as variáveis de ambiente (crie um arquivo .env baseado no .env.example):
+
+VITE_API_URL=http://localhost:3000
+
+
+Inicie o servidor de desenvolvimento:
+
+npm run dev
+
+
+O frontend estará rodando localmente em:
+👉 http://localhost:5173
+
+Estrutura do projeto
+padaria-frontend/
+├── public/            # Arquivos estáticos
+├── src/
+│   ├── components/    # Componentes reutilizáveis
+│   ├── pages/         # Páginas (rotas principais)
+│   ├── context/       # Context API (auth, estados globais)
+│   ├── hooks/         # Hooks customizados
+│   ├── utils/         # Funções utilitárias
+│   ├── App.jsx        # Roteamento principal
+│   └── main.jsx       # Ponto de entrada
+├── .env.example       # Variáveis de ambiente exemplo
+├── package.json       # Dependências e scripts
+
+Status do projeto
+
+Frontend em desenvolvimento 🚧
+
+Backend funcional ✅
+
+Pronto para integração total e uso em ambiente real 🔥
+
+Contato
+
+Caso queira saber mais, testar o sistema ou contribuir:
+
+👤 Luiz Braga
+📧 luizbragga@gmail.com
+
+🔗 LinkedIn
