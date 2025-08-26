@@ -58,6 +58,15 @@ export default function LocalizacaoEntregadores() {
       <h2 className="text-lg font-bold mb-2">
         📍 Localização dos Entregadores
       </h2>
+      {base.length === 0 && (
+        <button
+          className="bg-blue-600 text-white px-3 py-1 rounded mb-3"
+          onClick={escolherRota}
+        >
+          Assumir rota…
+        </button>
+      )}
+
       <MapContainer
         center={[posicaoInicial.latitude, posicaoInicial.longitude]}
         zoom={13}

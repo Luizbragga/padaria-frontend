@@ -36,3 +36,11 @@ export const getRole = () => {
   // OU decodifique do token, se preferir.
   return null;
 };
+export const getUsuario = () => {
+  try {
+    const raw = localStorage.getItem("usuario");
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+};
