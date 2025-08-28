@@ -1,4 +1,7 @@
+// src/components/ProtectedRoute.jsx
+import { useEffect, useRef, useState } from "react";
 import { Navigate } from "react-router-dom";
+import axios from "axios";
 import {
   getToken,
   getRole,
@@ -6,50 +9,110 @@ import {
   getRefreshToken,
   setToken,
 } from "../utils/auth";
-import axios from "axios";
 
-export default function ProtectedRoute({ children, rolesPermitidos = [] }) {
-  const token = getToken();
+/**
+ * Uso:
+ * <ProtectedRoute rolesPermitidos={["admin","gerente"]}>
+ *   <MinhaPagina />
+ * </ProtectedRoute>
+ */
+export default function ProtectedRoute({
+  children,
+  rolesPermitidos = [],
+  // opcional: UI enquanto checa/renova token
+  fallback = null,
+  // rota de redirecionamento quando não autorizado
+  redirectTo = "/",
+}) {
+  const [ready, setReady] = useState(false);
+  const [allow, setAllow] = useState(false);
+  const triedRefresh = useRef(false);
 
-  // Se não houver token, vai pro login
-  if (!token) {
-    console.warn("🔒 Token ausente. Redirecionando para login...");
-    localStorage.clear();
-    return <Navigate to="/" replace />;
-  }
+  const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
-  // Se o token estiver expirado, tenta renovar
-  if (isTokenExpirado()) {
-    console.warn("⏳ Token expirado. Tentando renovar...");
+  useEffect(() => {
+    let alive = true;
 
-    const refreshToken = getRefreshToken();
+    async function ensureAuth() {
+      // 1) precisa ter token
+      const token = getToken();
+      if (!token) {
+        if (alive) {
+          setAllow(false);
+          setReady(true);
+        }
+        return;
+      }
 
-    if (!refreshToken) {
-      console.error("❌ Nenhum refresh token disponível.");
-      localStorage.clear();
-      return <Navigate to="/" replace />;
+      // 2) se expirou, tenta renovar 1x
+      if (isTokenExpirado()) {
+        if (!triedRefresh.current) {
+          triedRefresh.current = true;
+
+          const refreshToken = getRefreshToken();
+          if (!refreshToken) {
+            if (alive) {
+              setAllow(false);
+              setReady(true);
+            }
+            return;
+          }
+
+          try {
+            const { data } = await axios.post(`${API_URL}/token/refresh`, {
+              refreshToken,
+            });
+            if (!alive) return;
+
+            // salva e injeta o novo token
+            setToken(data.token);
+            axios.defaults.headers.common.Authorization = `Bearer ${data.token}`;
+          } catch (err) {
+            if (!alive) return;
+            // refresh falhou → força login
+            setAllow(false);
+            setReady(true);
+            return;
+          }
+        } else {
+          // já tentamos renovar e falhou
+          if (alive) {
+            setAllow(false);
+            setReady(true);
+          }
+          return;
+        }
+      }
+
+      // 3) valida papéis (se houver restrição)
+      const role = getRole();
+      if (rolesPermitidos.length > 0 && !rolesPermitidos.includes(role)) {
+        if (alive) {
+          setAllow(false);
+          setReady(true);
+        }
+        return;
+      }
+
+      // 4) autorizado
+      if (alive) {
+        setAllow(true);
+        setReady(true);
+      }
     }
 
-    // Faz a chamada de refresh token
-    axios
-      .post("http://localhost:3000/token/refresh", { refreshToken })
-      .then((res) => {
-        console.log("✅ Token renovado com sucesso");
-        setToken(res.data.token); // Atualiza no localStorage
-      })
-      .catch((err) => {
-        console.error("❌ Erro ao renovar token:", err);
-        localStorage.clear();
-        window.location.href = "/"; // Redireciona para login
-      });
-  }
+    ensureAuth();
+    return () => {
+      alive = false;
+    };
+  }, [API_URL, rolesPermitidos]);
 
-  // Checa a role do usuário
-  const role = getRole();
-  if (rolesPermitidos.length > 0 && !rolesPermitidos.includes(role)) {
-    console.warn("🚫 Acesso negado: role não permitida:", role);
-    return <Navigate to="/" replace />;
-  }
+  // aguardando checagem/refresh
+  if (!ready) return fallback;
 
+  // não autorizado → redireciona
+  if (!allow) return <Navigate to={redirectTo} replace />;
+
+  // autorizado → renderiza filhos
   return children;
 }

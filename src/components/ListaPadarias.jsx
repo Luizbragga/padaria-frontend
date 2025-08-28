@@ -1,125 +1,155 @@
-import React, { useEffect, useState } from "react";
+// src/components/ListaPadarias.jsx
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { getToken, getUsuario } from "../utils/auth";
-
 import {
   listarPadarias,
   alterarStatusPadaria,
   deletarPadaria,
 } from "../services/padariaService";
 
-const ListaPadarias = () => {
+export default function ListaPadarias() {
   const [padarias, setPadarias] = useState([]);
   const [erro, setErro] = useState("");
   const [carregando, setCarregando] = useState(false);
+  const [busyId, setBusyId] = useState(null); // id da padaria sendo alterada/deletada
   const navigate = useNavigate();
+  const alive = useRef(true);
 
-  const token = getToken();
-  const usuario = getUsuario();
-
-  const buscarPadarias = async () => {
+  async function buscarPadarias() {
     try {
       setCarregando(true);
+      setErro("");
       const padariasAPI = await listarPadarias();
-      setPadarias(padariasAPI);
+      if (!alive.current) return;
+      setPadarias(Array.isArray(padariasAPI) ? padariasAPI : []);
     } catch (err) {
       console.error("Erro ao buscar padarias:", err);
-      setErro("Erro ao buscar padarias");
+      if (!alive.current) return;
+      setErro("Erro ao buscar padarias.");
     } finally {
-      setCarregando(false);
+      if (alive.current) setCarregando(false);
     }
-  };
+  }
 
   useEffect(() => {
+    alive.current = true;
     buscarPadarias();
+    return () => {
+      alive.current = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const alterarStatus = async (id, acao) => {
+  async function alterarStatus(id, acao) {
     try {
+      setBusyId(id);
       await alterarStatusPadaria(id, acao);
-      buscarPadarias();
+      await buscarPadarias();
     } catch (err) {
+      console.error(err);
       alert(`Erro ao ${acao === "ativar" ? "ativar" : "desativar"} padaria.`);
+    } finally {
+      setBusyId(null);
     }
-  };
+  }
 
-  const deletar = async (id) => {
-    const confirmacao = window.confirm(
-      "Tem certeza que deseja excluir essa padaria?"
-    );
-    if (!confirmacao) return;
-
+  async function deletar(id) {
+    const ok = window.confirm("Tem certeza que deseja excluir essa padaria?");
+    if (!ok) return;
     try {
+      setBusyId(id);
       await deletarPadaria(id);
-      buscarPadarias();
+      await buscarPadarias();
     } catch (err) {
+      console.error(err);
       alert("Erro ao deletar padaria.");
+    } finally {
+      setBusyId(null);
     }
-  };
-
-  if (erro) return <p className="text-red-600">{erro}</p>;
+  }
 
   return (
     <div className="mt-6">
-      <h2 className="text-xl font-bold mb-4">Padarias Cadastradas</h2>
-      {carregando ? (
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-xl font-bold">Padarias Cadastradas</h2>
+        <button
+          className="text-sm px-3 py-1 rounded border"
+          onClick={buscarPadarias}
+          disabled={carregando}
+          title="Atualizar lista"
+        >
+          {carregando ? "Atualizando…" : "Atualizar"}
+        </button>
+      </div>
+
+      {erro && <p className="text-red-600 mb-3">{erro}</p>}
+
+      {carregando && padarias.length === 0 ? (
         <p>Carregando padarias...</p>
       ) : padarias.length === 0 ? (
         <p>Nenhuma padaria cadastrada.</p>
       ) : (
         <ul className="space-y-4">
-          {padarias.map((padaria) => (
-            <li
-              key={padaria._id}
-              className="p-4 border rounded bg-white shadow flex flex-col md:flex-row md:items-center md:justify-between"
-            >
-              <div>
-                <p>
-                  <strong>Nome:</strong> {padaria.nome}
-                </p>
-                <p>
-                  <strong>Cidade:</strong> {padaria.cidade}
-                </p>
-                <p>
-                  <strong>Status:</strong>{" "}
-                  {padaria.ativa ? "Ativa" : "Desativada"}
-                </p>
-              </div>
-              <div className="mt-2 md:mt-0 space-x-2">
-                {padaria.ativa ? (
+          {padarias.map((padaria) => {
+            const disabled = busyId === padaria._id || carregando;
+            return (
+              <li
+                key={padaria._id}
+                className="p-4 border rounded bg-white shadow flex flex-col md:flex-row md:items-center md:justify-between"
+              >
+                <div className="mb-2 md:mb-0">
+                  <p>
+                    <strong>Nome:</strong> {padaria.nome}
+                  </p>
+                  <p>
+                    <strong>Cidade:</strong> {padaria.cidade}
+                  </p>
+                  <p>
+                    <strong>Status:</strong>{" "}
+                    {padaria.ativa ? "Ativa" : "Desativada"}
+                  </p>
+                </div>
+
+                <div className="mt-2 md:mt-0 flex flex-wrap gap-2">
+                  {padaria.ativa ? (
+                    <button
+                      className="bg-yellow-500 text-white px-3 py-1 rounded disabled:opacity-60"
+                      onClick={() => alterarStatus(padaria._id, "desativar")}
+                      disabled={disabled}
+                    >
+                      Desativar
+                    </button>
+                  ) : (
+                    <button
+                      className="bg-green-600 text-white px-3 py-1 rounded disabled:opacity-60"
+                      onClick={() => alterarStatus(padaria._id, "ativar")}
+                      disabled={disabled}
+                    >
+                      Ativar
+                    </button>
+                  )}
+
                   <button
-                    className="bg-yellow-500 text-white px-3 py-1 rounded"
-                    onClick={() => alterarStatus(padaria._id, "desativar")}
+                    className="bg-red-600 text-white px-3 py-1 rounded disabled:opacity-60"
+                    onClick={() => deletar(padaria._id)}
+                    disabled={disabled}
                   >
-                    Desativar
+                    Deletar
                   </button>
-                ) : (
+
                   <button
-                    className="bg-green-600 text-white px-3 py-1 rounded"
-                    onClick={() => alterarStatus(padaria._id, "ativar")}
+                    className="bg-blue-600 text-white px-3 py-1 rounded disabled:opacity-60"
+                    onClick={() => navigate(`/painel?padaria=${padaria._id}`)}
+                    disabled={disabled}
                   >
-                    Ativar
+                    Ver painel
                   </button>
-                )}
-                <button
-                  className="bg-red-600 text-white px-3 py-1 rounded"
-                  onClick={() => deletar(padaria._id)}
-                >
-                  Deletar
-                </button>
-                <button
-                  className="bg-blue-600 text-white px-3 py-1 rounded"
-                  onClick={() => navigate(`/painel?padaria=${padaria._id}`)}
-                >
-                  Ver painel
-                </button>
-              </div>
-            </li>
-          ))}
+                </div>
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>
   );
-};
-
-export default ListaPadarias;
+}

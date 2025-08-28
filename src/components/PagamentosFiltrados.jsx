@@ -1,91 +1,170 @@
-import React, { useEffect, useState } from "react";
+// src/components/PagamentosFiltrados.jsx
+import React, { useEffect, useRef, useState } from "react";
 import axios from "axios";
 import { getToken } from "../utils/auth";
 
-const PagamentosFiltrados = ({ dataInicial, dataFinal, forma }) => {
+const API_URL = import.meta.env.VITE_API_URL ?? "";
+
+function formatEUR(n) {
+  return new Intl.NumberFormat("pt-PT", {
+    style: "currency",
+    currency: "EUR",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(Number(n) || 0);
+}
+
+function normalizaResposta(input) {
+  const src = input?.data ?? input ?? {};
+  const lista = Array.isArray(src.pagamentos)
+    ? src.pagamentos
+    : Array.isArray(src.data)
+    ? src.data
+    : [];
+
+  const pagamentos = lista
+    .map((p, i) => {
+      const id = p?._id || p?.id || `p_${i}`;
+      const cliente =
+        typeof p?.cliente === "string"
+          ? p.cliente
+          : p?.cliente?.nome || p?.clienteNome || "Cliente";
+      const entregador =
+        typeof p?.entregador === "string"
+          ? p.entregador
+          : p?.entregador?.nome || p?.entregadorNome || "—";
+      const valor = Number(p?.valor ?? p?.amount ?? 0) || 0;
+      const forma = (
+        p?.forma ??
+        p?.metodo ??
+        p?.metodoPagamento ??
+        ""
+      ).toString();
+      const data = p?.data || p?.createdAt || p?.updatedAt || null;
+      return { id, cliente, entregador, valor, forma, data };
+    })
+    .sort((a, b) => new Date(b.data || 0) - new Date(a.data || 0));
+
+  return {
+    pagamentos,
+    totalRecebido: Number(src.totalRecebido ?? src.total ?? 0) || 0,
+    clientesPagantes: Number(src.clientesPagantes ?? src.pagantes ?? 0) || 0,
+  };
+}
+
+export default function PagamentosFiltrados({
+  dataInicial,
+  dataFinal,
+  forma,
+  padariaId,
+}) {
   const [pagamentos, setPagamentos] = useState([]);
   const [totalRecebido, setTotalRecebido] = useState(0);
   const [clientesPagantes, setClientesPagantes] = useState(0);
   const [erro, setErro] = useState("");
+  const [carregando, setCarregando] = useState(true);
+  const aliveRef = useRef(true);
 
   useEffect(() => {
-    const buscarPagamentos = async () => {
+    aliveRef.current = true;
+    return () => {
+      aliveRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    async function buscarPagamentos() {
+      setCarregando(true);
       try {
         const token = getToken();
         const params = {};
 
         if (dataInicial) params.dataInicial = dataInicial;
         if (dataFinal) params.dataFinal = dataFinal;
-        if (forma && forma.toLowerCase() !== "todas") {
+        if (forma && forma.toLowerCase() !== "todas")
           params.forma = forma.toLowerCase();
-        }
+        if (padariaId) params.padaria = padariaId;
 
-        const resposta = await axios.get("/analitico/pagamentos", {
+        const resp = await axios.get(`${API_URL}/analitico/pagamentos`, {
           headers: { Authorization: `Bearer ${token}` },
-          params, // usa os filtros aqui
+          params,
         });
-        console.log("Resposta do backend:", resposta.data);
-        setPagamentos(resposta.data.pagamentos);
-        setTotalRecebido(resposta.data.totalRecebido);
-        setClientesPagantes(resposta.data.clientesPagantes);
 
+        if (!aliveRef.current) return;
+        const norm = normalizaResposta(resp.data);
+
+        setPagamentos(norm.pagamentos);
+        setTotalRecebido(norm.totalRecebido);
+        setClientesPagantes(norm.clientesPagantes);
         setErro("");
       } catch (err) {
-        console.error(err);
+        console.error("Erro ao buscar pagamentos:", err);
+        if (!aliveRef.current) return;
         setErro("Erro ao buscar pagamentos");
+        setPagamentos([]);
+        setTotalRecebido(0);
+        setClientesPagantes(0);
+      } finally {
+        if (aliveRef.current) setCarregando(false);
       }
-    };
+    }
 
     buscarPagamentos();
-  }, [dataInicial, dataFinal, forma]);
+  }, [dataInicial, dataFinal, forma, padariaId]);
 
   return (
     <div className="p-4 bg-white rounded shadow">
       <h2 className="text-xl font-semibold mb-4">Pagamentos Filtrados</h2>
-      {erro && <p className="text-red-500">{erro}</p>}
-      {!pagamentos || pagamentos.length === 0 ? (
+
+      {carregando ? (
+        <p className="text-gray-600">Carregando…</p>
+      ) : erro ? (
+        <p className="text-red-500">{erro}</p>
+      ) : !pagamentos || pagamentos.length === 0 ? (
         <p className="text-gray-600">
           Nenhum pagamento encontrado com esses filtros.
         </p>
       ) : (
         <>
-          <table className="w-full table-auto border-collapse">
-            <thead>
-              <tr className="bg-gray-100">
-                <th className="border p-2">Cliente</th>
-                <th className="border p-2">Entregador</th>
-                <th className="border p-2">Valor</th>
-                <th className="border p-2">Forma</th>
-                <th className="border p-2">Data</th>
-              </tr>
-            </thead>
-            <tbody>
-              {pagamentos.map((p) => (
-                <tr key={p._id} className="text-center">
-                  <td className="border p-2">{p.cliente}</td>
-                  <td className="border p-2">{p.entregador}</td>
-                  <td className="border p-2">€ {p.valor.toFixed(2)}</td>
-                  <td className="border p-2">
-                    € {p.valor ? p.valor.toFixed(2) : "0.00"}
-                  </td>
-                  <td className="border p-2">
-                    {p.data
-                      ? new Date(p.data).toLocaleDateString("pt-PT")
-                      : "--"}
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full table-auto border-collapse">
+              <thead>
+                <tr className="bg-gray-100">
+                  <th className="border p-2 text-left">Cliente</th>
+                  <th className="border p-2 text-left">Entregador</th>
+                  <th className="border p-2 text-right">Valor</th>
+                  <th className="border p-2 text-left">Forma</th>
+                  <th className="border p-2 text-left">Data</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {pagamentos.map((p) => (
+                  <tr key={p.id} className="hover:bg-gray-50">
+                    <td className="border p-2">{p.cliente}</td>
+                    <td className="border p-2">{p.entregador}</td>
+                    <td className="border p-2 text-right">
+                      {formatEUR(p.valor)}
+                    </td>
+                    <td className="border p-2 capitalize">{p.forma || "—"}</td>
+                    <td className="border p-2">
+                      {p.data
+                        ? new Date(p.data).toLocaleDateString("pt-PT")
+                        : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
 
-          <p className="mt-4 font-medium">
-            Total Recebido: € {totalRecebido.toFixed(2)}
-          </p>
-          <p className="font-medium">Clientes Pagantes: {clientesPagantes}</p>
+          <div className="mt-4 flex flex-wrap gap-6">
+            <p className="font-medium">
+              Total Recebido: {formatEUR(totalRecebido)}
+            </p>
+            <p className="font-medium">Clientes Pagantes: {clientesPagantes}</p>
+          </div>
         </>
       )}
     </div>
   );
-};
-
-export default PagamentosFiltrados;
+}

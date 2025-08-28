@@ -1,11 +1,18 @@
+// src/components/MapaEntregadores.jsx
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
-import { getToken } from "../utils/auth";
+import axios from "axios";
+import { getToken, getUsuario } from "../utils/auth";
 
-// Corrige os ícones padrão do Leaflet
-delete L.Icon.Default.prototype._getIconUrl;
+const API_URL = import.meta.env.VITE_API_URL ?? "";
+
+// Corrige os ícones padrão do Leaflet (sem quebrar se já foi feito)
+try {
+  // @ts-ignore
+  delete L.Icon.Default.prototype._getIconUrl;
+} catch {}
 L.Icon.Default.mergeOptions({
   iconRetinaUrl:
     "https://unpkg.com/leaflet@1.9.3/dist/images/marker-icon-2x.png",
@@ -13,72 +20,167 @@ L.Icon.Default.mergeOptions({
   shadowUrl: "https://unpkg.com/leaflet@1.9.3/dist/images/marker-shadow.png",
 });
 
-export default function MapaEntregadores() {
+// Normaliza diferentes formatos vindos do backend
+function normalizaLista(input) {
+  const arr = Array.isArray(input)
+    ? input
+    : Array.isArray(input?.data)
+    ? input.data
+    : [];
+  return arr
+    .map((e, i) => {
+      const id = e?._id || e?.id || `ent_${i}`;
+      const nome =
+        e?.nome ||
+        e?.entregadorNome ||
+        (typeof e?.entregador === "object"
+          ? e.entregador?.nome
+          : e?.entregador) ||
+        "Entregador";
+      const loc =
+        e?.localizacaoAtual || e?.location || e?.posicao || e?.geo || null;
+
+      let lat = null;
+      let lng = null;
+      if (loc) {
+        lat = loc.lat ?? loc.latitude ?? null;
+        lng = loc.lng ?? loc.longitude ?? null;
+      }
+      if (typeof lat !== "number" || typeof lng !== "number") return null;
+
+      return { id, nome, lat, lng };
+    })
+    .filter(Boolean);
+}
+
+export default function MapaEntregadores({ padariaId }) {
+  const usuario = getUsuario();
+  // Oculta para entregador (visão gerencial)
+  if (usuario?.role === "entregador") return null;
+
   const [entregadores, setEntregadores] = useState([]);
   const [erro, setErro] = useState("");
+  const [carregando, setCarregando] = useState(true);
+
+  const aliveRef = useRef(true);
+  const timerRef = useRef(null);
+
+  async function carregar() {
+    try {
+      setErro("");
+      const token = getToken();
+      const { data } = await axios.get(
+        `${API_URL}/analitico/localizacao-entregadores`,
+        {
+          params: padariaId ? { padaria: padariaId } : {},
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+      if (!aliveRef.current) return;
+      setEntregadores(normalizaLista(data));
+    } catch (e) {
+      console.error("Erro ao buscar localização dos entregadores:", e);
+      if (!aliveRef.current) return;
+      setErro("Erro ao buscar localização dos entregadores.");
+      setEntregadores([]);
+    } finally {
+      if (aliveRef.current) setCarregando(false);
+    }
+  }
+
+  function startPolling() {
+    stopPolling();
+    if (document.visibilityState === "hidden") return;
+    timerRef.current = setInterval(carregar, 10_000);
+  }
+  function stopPolling() {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+  }
 
   useEffect(() => {
-    const carregarEntregadores = async () => {
-      try {
-        const token = getToken();
-        const resposta = await fetch(
-          "http://localhost:3000/analitico/localizacao-entregadores",
-          {
-            headers: { Authorization: `Bearer ${token}` },
-          }
-        );
-        const dados = await resposta.json();
-        setEntregadores(dados);
-      } catch (err) {
-        console.error("Erro ao carregar localização:", err);
-        setErro("Erro ao buscar localização dos entregadores.");
+    aliveRef.current = true;
+
+    if (!padariaId) {
+      // sem padaria selecionada, nada a mostrar
+      setCarregando(false);
+      setEntregadores([]);
+      return () => {
+        aliveRef.current = false;
+      };
+    }
+
+    carregar().then(() => startPolling());
+
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") {
+        stopPolling();
+      } else {
+        carregar().then(() => startPolling());
       }
     };
+    document.addEventListener("visibilitychange", onVisibility);
 
-    carregarEntregadores();
-    const intervalo = setInterval(carregarEntregadores, 10000); // atualiza a cada 10s
-    return () => clearInterval(intervalo);
-  }, []);
+    return () => {
+      aliveRef.current = false;
+      document.removeEventListener("visibilitychange", onVisibility);
+      stopPolling();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [padariaId]);
 
-  if (erro) return <p className="text-red-600">{erro}</p>;
-  if (entregadores.length === 0)
-    return <p>Sem dados de localização de entregadores no momento.</p>;
-
-  const centroMapa =
-    entregadores[0]?.localizacaoAtual?.lat &&
-    entregadores[0]?.localizacaoAtual?.lng
-      ? entregadores[0].localizacaoAtual
-      : { lat: 41.545, lng: -8.4307 }; // Exemplo: Barcelos
+  const center = useMemo(() => {
+    if (!entregadores.length) return [41.545, -8.4307]; // fallback (Barcelos)
+    const { latSum, lngSum } = entregadores.reduce(
+      (acc, e) => ({ latSum: acc.latSum + e.lat, lngSum: acc.lngSum + e.lng }),
+      { latSum: 0, lngSum: 0 }
+    );
+    return [latSum / entregadores.length, lngSum / entregadores.length];
+  }, [entregadores]);
 
   return (
     <div className="mt-6 bg-white rounded shadow p-4">
-      <h2 className="font-bold text-lg mb-2">
-        📍 Localização dos Entregadores
-      </h2>
-      <MapContainer
-        center={[centroMapa.lat, centroMapa.lng]}
-        zoom={13}
-        style={{ height: "400px", width: "100%" }}
-      >
-        <TileLayer
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          attribution='&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a>'
-        />
-        {entregadores.map((ent) =>
-          ent.localizacaoAtual ? (
-            <Marker
-              key={ent._id}
-              position={[ent.localizacaoAtual.lat, ent.localizacaoAtual.lng]}
-            >
+      <div className="flex items-center justify-between mb-2">
+        <h2 className="font-bold text-lg">📍 Localização dos Entregadores</h2>
+        <button
+          className="text-sm px-3 py-1 rounded border"
+          onClick={() => carregar().then(() => startPolling())}
+          title="Atualizar agora"
+        >
+          Atualizar
+        </button>
+      </div>
+
+      {carregando && <p className="text-gray-500">Carregando mapa…</p>}
+      {erro && <p className="text-red-600">{erro}</p>}
+
+      {!carregando && !erro && entregadores.length === 0 ? (
+        <p className="text-gray-600">
+          Sem dados de localização de entregadores no momento.
+        </p>
+      ) : (
+        <MapContainer
+          center={center}
+          zoom={13}
+          style={{ height: "400px", width: "100%" }}
+        >
+          <TileLayer
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            attribution='&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a>'
+          />
+          {entregadores.map((ent) => (
+            <Marker key={ent.id} position={[ent.lat, ent.lng]}>
               <Popup>
                 <strong>{ent.nome}</strong>
                 <br />
                 Localização Atual
               </Popup>
             </Marker>
-          ) : null
-        )}
-      </MapContainer>
+          ))}
+        </MapContainer>
+      )}
     </div>
   );
 }

@@ -53,26 +53,56 @@ export default function Login() {
       <h2>Login</h2>
       {erro && <p style={{ color: "red" }}>{erro}</p>}
       <form onSubmit={handleLogin}>
-        <div>
-          <label>Usuário:</label>
-          <input
-            type="text"
-            value={usuario}
-            onChange={(e) => setUsuario(e.target.value)}
-            required
-          />
-        </div>
-        <div style={{ marginTop: "10px" }}>
-          <label>Senha:</label>
-          <input
-            type="password"
-            value={senha}
-            onChange={(e) => setSenha(e.target.value)}
-            required
-          />
-        </div>
-        <button type="submit" style={{ marginTop: "15px" }}>
-          Entrar
+        <label style={{ display: "block", fontSize: 14, marginBottom: 6 }}>
+          Usuário
+        </label>
+        <input
+          type="text"
+          value={usuario}
+          onChange={(e) => setUsuario(e.target.value)}
+          autoComplete="username"
+          required
+          style={{
+            width: "100%",
+            padding: 10,
+            borderRadius: 8,
+            border: "1px solid #d1d5db",
+          }}
+        />
+
+        <label style={{ display: "block", fontSize: 14, margin: "12px 0 6px" }}>
+          Senha
+        </label>
+        <input
+          type="password"
+          value={senha}
+          onChange={(e) => setSenha(e.target.value)}
+          autoComplete="current-password"
+          required
+          style={{
+            width: "100%",
+            padding: 10,
+            borderRadius: 8,
+            border: "1px solid #d1d5db",
+          }}
+        />
+
+        <button
+          type="submit"
+          disabled={carregando}
+          style={{
+            marginTop: 16,
+            width: "100%",
+            padding: "10px 14px",
+            borderRadius: 8,
+            border: "none",
+            background: carregando ? "#9ca3af" : "#2563eb",
+            color: "#fff",
+            fontWeight: 600,
+            cursor: carregando ? "not-allowed" : "pointer",
+          }}
+        >
+          {carregando ? "Entrando..." : "Entrar"}
         </button>
       </form>
     </div>

@@ -1,53 +1,106 @@
-import React, { useEffect, useState } from "react";
+// src/components/RankingEntregadores.jsx
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { getUsuario, getToken } from "../utils/auth";
+import axios from "axios";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
+const API_URL = import.meta.env.VITE_API_URL ?? "";
+
+// aceita vários formatos do backend e padroniza
+function normaliza(data) {
+  const arr = Array.isArray(data)
+    ? data
+    : Array.isArray(data?.data)
+    ? data.data
+    : [];
+  return arr.map((row, i) => {
+    const nome =
+      row?.entregador ??
+      row?.nome ??
+      row?.userName ??
+      row?.usuario ??
+      row?.entregadorNome ??
+      (typeof row?.usuario === "object" ? row.usuario?.nome : "") ??
+      "—";
+
+    const total =
+      Number(row?.totalEntregas ?? row?.total ?? row?.qtd ?? 0) || 0;
+    const entregues = Number(row?.entregues ?? row?.feitas ?? 0) || 0;
+    const pendentes =
+      Number(row?.pendentes ?? row?.naoEntregues ?? total - entregues) || 0;
+
+    return {
+      key: row?.entregadorId ?? row?.usuarioId ?? row?._id ?? i,
+      entregador: nome,
+      totalEntregas: total,
+      entregues,
+      pendentes: pendentes < 0 ? 0 : pendentes,
+    };
+  });
+}
 
 export default function RankingEntregadores({ padariaId }) {
+  const usuario = getUsuario();
   const [ranking, setRanking] = useState([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState("");
+  const alive = useRef(true);
+
+  const ehGerencial =
+    usuario && (usuario.role === "admin" || usuario.role === "gerente");
+  const podeMostrar = ehGerencial && !!padariaId;
 
   useEffect(() => {
-    const buscarRanking = async () => {
+    alive.current = true;
+    if (!podeMostrar) {
+      setRanking([]);
+      setCarregando(false);
+      setErro("");
+      return () => {
+        alive.current = false;
+      };
+    }
+
+    async function fetchRanking() {
       setCarregando(true);
       setErro("");
-
       try {
         const token = getToken();
-        const usuario = getUsuario();
-
-        if (!padariaId) return;
-        if (
-          !usuario ||
-          (usuario.role !== "admin" && usuario.role !== "gerente")
-        )
-          return;
-
-        const resp = await fetch(
-          `${API_URL}/analitico/entregas-por-entregador?padaria=${padariaId}`,
-          { headers: { Authorization: `Bearer ${token}` } }
+        const { data } = await axios.get(
+          `${API_URL}/analitico/entregas-por-entregador`,
+          {
+            params: { padaria: padariaId },
+            headers: { Authorization: `Bearer ${token}` },
+          }
         );
-
-        if (!resp.ok) throw new Error("Falha ao buscar ranking");
-        const dados = await resp.json();
-
-        // Ordena por total (desc) para parecer mais “ranking”
-        const ordenado = [...dados].sort(
-          (a, b) => (b.totalEntregas || 0) - (a.totalEntregas || 0)
-        );
-
-        setRanking(ordenado);
+        if (!alive.current) return;
+        const lista = normaliza(data)
+          // ordena por total desc, depois por nome asc (estável)
+          .sort((a, b) =>
+            a.totalEntregas === b.totalEntregas
+              ? String(a.entregador).localeCompare(String(b.entregador))
+              : b.totalEntregas - a.totalEntregas
+          );
+        setRanking(lista);
       } catch (e) {
         console.error("Erro ao buscar ranking de entregadores:", e);
+        if (!alive.current) return;
         setErro("Erro ao carregar ranking de entregadores.");
+        setRanking([]);
       } finally {
-        setCarregando(false);
+        if (alive.current) setCarregando(false);
       }
-    };
+    }
 
-    buscarRanking();
-  }, [padariaId]);
+    fetchRanking();
+    return () => {
+      alive.current = false;
+    };
+  }, [padariaId, podeMostrar]);
+
+  // Não renderiza para entregador / sem padaria
+  if (!podeMostrar) return null;
+
+  const linhas = useMemo(() => ranking, [ranking]);
 
   return (
     <div className="mt-10">
@@ -57,7 +110,7 @@ export default function RankingEntregadores({ padariaId }) {
         <p className="text-gray-500">Carregando ranking...</p>
       ) : erro ? (
         <p className="text-red-600">{erro}</p>
-      ) : ranking.length === 0 ? (
+      ) : !linhas.length ? (
         <p className="text-gray-500">Nenhum dado para exibir.</p>
       ) : (
         <div className="overflow-x-auto">
@@ -72,11 +125,8 @@ export default function RankingEntregadores({ padariaId }) {
               </tr>
             </thead>
             <tbody>
-              {ranking.map((linha, idx) => (
-                <tr
-                  key={linha.entregadorId || linha.entregador || idx}
-                  className="hover:bg-gray-50"
-                >
+              {linhas.map((linha, idx) => (
+                <tr key={linha.key} className="hover:bg-gray-50">
                   <td className="px-4 py-2 border-b">{idx + 1}</td>
                   <td className="px-4 py-2 border-b">{linha.entregador}</td>
                   <td className="px-4 py-2 border-b">{linha.totalEntregas}</td>
