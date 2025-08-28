@@ -4,26 +4,49 @@ import { getToken } from "../utils/auth";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
-// 👇 (já existia) — só padronizei a URL e passei padariaId via params
-export const buscarEntregasTempoReal = async (padariaId) => {
-  const token = getToken();
-  if (!padariaId || !token) return [];
+function auth() {
+  return { Authorization: `Bearer ${getToken()}` };
+}
 
-  const resp = await axios.get(`${API_URL}/analitico/entregas-tempo-real`, {
-    headers: { Authorization: `Bearer ${token}` },
-    params: { padaria: padariaId },
-  });
+/** Entregas em tempo real (dashboard gerente) */
+export async function buscarEntregasTempoReal(padariaId) {
+  if (!padariaId || !getToken()) return [];
+  try {
+    const { data } = await axios.get(
+      `${API_URL}/analitico/entregas-tempo-real`,
+      {
+        headers: auth(),
+        params: { padaria: padariaId },
+      }
+    );
+    return Array.isArray(data) ? data : data?.entregas ?? [];
+  } catch (e) {
+    console.error("buscarEntregasTempoReal:", e);
+    return [];
+  }
+}
 
-  return resp.data;
-};
+/** Minhas entregas (tabela do entregador) */
+export async function listarMinhasEntregas() {
+  if (!getToken()) return [];
+  try {
+    const { data } = await axios.get(`${API_URL}/entregas/minhas`, {
+      headers: auth(),
+    });
+    return Array.isArray(data) ? data : data?.entregas ?? [];
+  } catch (e) {
+    console.error("listarMinhasEntregas:", e);
+    return [];
+  }
+}
 
-// 👇 (nova) — usada pela página /entregador/entregas
-export const listarMinhasEntregas = async () => {
-  const token = getToken();
-
-  const resp = await axios.get(`${API_URL}/entregas/minhas`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-
-  return resp.data || [];
-};
+/* Opcional (para usarmos depois e remover axios direto do componente):
+export async function concluirEntrega(id) {
+  const { data } = await axios.put(`${API_URL}/entregas/${id}/concluir`, {}, { headers: auth() });
+  return data;
+}
+export async function registrarPagamento(id, { valor, forma }) {
+  const { data } = await axios.post(`${API_URL}/entregas/${id}/registrar-pagamento`, { valor, forma }, { headers: auth() });
+  return data;
+}
+*/

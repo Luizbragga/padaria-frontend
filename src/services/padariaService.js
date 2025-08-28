@@ -1,39 +1,43 @@
+// src/services/padariaService.js
+import axios from "axios";
 import { getToken } from "../utils/auth";
 
-// Listar todas as padarias
-export const listarPadarias = async () => {
+const API_URL = import.meta.env?.VITE_API_URL || "http://localhost:3000";
+
+function authHeader() {
   const token = getToken();
+  return { Authorization: `Bearer ${token}` };
+}
 
-  const resposta = await fetch("http://localhost:3000/padarias", {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
+/** Lista todas as padarias (admin/gerente) */
+export async function listarPadarias() {
+  const { data } = await axios.get(`${API_URL}/padarias`, {
+    headers: authHeader(),
   });
+  // backend pode devolver [{...}] ou { padarias:[...] }
+  return Array.isArray(data) ? data : data?.padarias ?? [];
+}
 
-  const json = await resposta.json();
-  return json;
-};
+/**
+ * Altera status da padaria
+ * acao: "ativar" | "desativar"
+ */
+export async function alterarStatusPadaria(id, acao) {
+  if (!["ativar", "desativar"].includes(acao)) {
+    throw new Error("Ação inválida ao alterar status da padaria");
+  }
+  const { data } = await axios.patch(
+    `${API_URL}/padarias/${id}/${acao}`,
+    null,
+    { headers: authHeader() }
+  );
+  return data;
+}
 
-// Alterar status da padaria (ativar ou desativar)
-export const alterarStatusPadaria = async (id, acao) => {
-  const token = getToken();
-
-  await fetch(`http://localhost:3000/padarias/${id}/${acao}`, {
-    method: "PATCH",
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
+/** Deleta uma padaria */
+export async function deletarPadaria(id) {
+  const { data } = await axios.delete(`${API_URL}/padarias/${id}`, {
+    headers: authHeader(),
   });
-};
-
-// Deletar uma padaria
-export const deletarPadaria = async (id) => {
-  const token = getToken();
-
-  await fetch(`http://localhost:3000/padarias/${id}`, {
-    method: "DELETE",
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
-};
+  return data;
+}
