@@ -1,57 +1,49 @@
+// src/pages/Login.jsx  (ou o caminho onde está seu Login)
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { post } from "../services/api"; // <= novo serviço
 
 export default function Login() {
   const [usuario, setUsuario] = useState("");
   const [senha, setSenha] = useState("");
   const [erro, setErro] = useState("");
+  const [carregando, setCarregando] = useState(false);
   const navigate = useNavigate();
 
   const handleLogin = async (e) => {
     e.preventDefault();
+    if (carregando) return;
 
     if (!usuario || !senha) {
       setErro("Preencha todos os campos");
       return;
     }
 
+    setErro("");
+    setCarregando(true);
     try {
-      const resposta = await fetch("http://localhost:3000/login", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ nome: usuario, senha }),
-      });
+      const dados = await post("/login", { nome: usuario, senha });
 
-      const dados = await resposta.json();
-      if (!resposta.ok) throw new Error(dados.erro || "Erro ao fazer login");
-
+      // Esperado do backend:
+      // { token, refreshToken, usuario:{ id, nome, role, padaria? } }
       localStorage.setItem("token", dados.token);
       localStorage.setItem("refreshToken", dados.refreshToken);
       localStorage.setItem("usuario", JSON.stringify(dados.usuario));
 
-      const { role, padaria, _id } = dados.usuario;
-
-      if (role === "admin") {
-        navigate("/painel");
-      } else if (role === "gerente") {
-        navigate("/painel");
-      } else if (role === "entregador") {
-        navigate("/painel");
-      } else {
-        setErro("Tipo de usuário inválido");
-      }
+      navigate("/painel");
     } catch (err) {
       console.error("Erro no login:", err);
-      setErro(err.message || "Erro inesperado");
+      setErro(err.message || "Erro ao fazer login");
+    } finally {
+      setCarregando(false);
     }
   };
 
   return (
-    <div style={{ maxWidth: "400px", margin: "50px auto" }}>
+    <div style={{ maxWidth: 400, margin: "50px auto" }}>
       <h2>Login</h2>
       {erro && <p style={{ color: "red" }}>{erro}</p>}
+
       <form onSubmit={handleLogin}>
         <label style={{ display: "block", fontSize: 14, marginBottom: 6 }}>
           Usuário
@@ -59,7 +51,10 @@ export default function Login() {
         <input
           type="text"
           value={usuario}
-          onChange={(e) => setUsuario(e.target.value)}
+          onChange={(e) => {
+            setUsuario(e.target.value);
+            if (erro) setErro("");
+          }}
           autoComplete="username"
           required
           style={{
@@ -76,7 +71,10 @@ export default function Login() {
         <input
           type="password"
           value={senha}
-          onChange={(e) => setSenha(e.target.value)}
+          onChange={(e) => {
+            setSenha(e.target.value);
+            if (erro) setErro("");
+          }}
           autoComplete="current-password"
           required
           style={{
