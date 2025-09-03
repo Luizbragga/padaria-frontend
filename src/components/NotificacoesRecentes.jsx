@@ -74,12 +74,19 @@ export default function NotificacoesRecentes({ padariaId }) {
       if (!aliveRef.current) return;
       setEventos(normalizaEventos(data));
     } catch (e) {
-      console.error("Erro ao buscar notificações:", e);
-      if (!aliveRef.current) return;
-      setErro("Erro ao carregar notificações recentes.");
-      setEventos([]);
+      if (!alive.current) return;
+
+      const code = e?.response?.status ?? null;
+      if (code === 404 || code === 204) {
+        setNotificacoes([]);
+        setErro(""); // não mostra aviso vermelho
+      } else {
+        console.error("Erro ao carregar notificações:", e);
+        setErro("Erro ao carregar notificações recentes.");
+        setNotificacoes([]);
+      }
     } finally {
-      if (aliveRef.current) setCarregando(false);
+      if (alive.current) setCarregando(false);
     }
   }
 

@@ -98,9 +98,22 @@ export default function PagamentosFiltrados({
         setClientesPagantes(norm.clientesPagantes);
         setErro("");
       } catch (err) {
-        console.error("Erro ao buscar pagamentos:", err);
         if (!aliveRef.current) return;
-        setErro("Erro ao buscar pagamentos");
+
+        const status = err?.response?.status;
+        console.error(
+          "Erro ao buscar pagamentos:",
+          status,
+          err?.response?.data || err?.message
+        );
+
+        // Tratar "sem dados" como vazio silencioso (sem banner de erro)
+        if (status === 404 || status === 204 || status === 422) {
+          setErro("");
+        } else {
+          setErro("Erro ao buscar pagamentos");
+        }
+
         setPagamentos([]);
         setTotalRecebido(0);
         setClientesPagantes(0);

@@ -1,53 +1,20 @@
 // src/services/analiticoService.js
-import { getToken } from "../utils/auth";
+import http from "./http";
 
-const API_URL = import.meta.env?.VITE_API_URL || "http://localhost:3000";
-
-function buildQS(params) {
-  const u = new URLSearchParams();
-  Object.entries(params || {}).forEach(([k, v]) => {
-    if (v !== undefined && v !== null && v !== "") u.set(k, String(v));
-  });
-  return u.toString();
-}
-
-async function apiGet(path, params = {}) {
-  const token = getToken();
-  const qs = buildQS(params);
-  const url = qs ? `${API_URL}${path}?${qs}` : `${API_URL}${path}`;
-
-  const res = await fetch(url, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-
-  let json = null;
-  try {
-    json = await res.json();
-  } catch {
-    json = null;
-  }
-
-  if (!res.ok) {
-    const msg = json?.erro || `Falha (${res.status}) em ${path}`;
-    throw new Error(msg);
-  }
-  return json ?? {};
+/* Helpers de normalização iguais aos que você já usava no arquivo antigo */
+function toArray(x) {
+  return Array.isArray(x) ? x : [];
 }
 
 /** Entregas por dia da semana -> [{ _id, total }] */
 export async function buscarEntregasPorDia(padariaId) {
   if (!padariaId) return [];
   try {
-    const json = await apiGet("/analitico/entregas-por-dia-da-semana", {
-      padaria: padariaId,
+    const { data } = await http.get("/analitico/entregas-por-dia-da-semana", {
+      params: { padaria: padariaId },
     });
 
-    const src = Array.isArray(json?.dias)
-      ? json.dias
-      : Array.isArray(json)
-      ? json
-      : [];
-
+    const src = Array.isArray(data?.dias) ? data.dias : toArray(data);
     return src.map((d) => ({
       _id: d._id ?? d.dia ?? d.label ?? d.nome ?? "",
       total: Number(d.total ?? d.qtd ?? d.valor ?? 0),
@@ -62,16 +29,11 @@ export async function buscarEntregasPorDia(padariaId) {
 export async function buscarFaturamentoMensal(padariaId) {
   if (!padariaId) return [];
   try {
-    const json = await apiGet("/analitico/faturamento-mensal", {
-      padaria: padariaId,
+    const { data } = await http.get("/analitico/faturamento-mensal", {
+      params: { padaria: padariaId },
     });
 
-    const arr = Array.isArray(json?.dados)
-      ? json.dados
-      : Array.isArray(json)
-      ? json
-      : [];
-
+    const arr = Array.isArray(data?.dados) ? data.dados : toArray(data);
     return arr.map((x) => ({
       mes: x.mes ?? x._id ?? x.label ?? "",
       valorTotal: Number(x.valorTotal ?? x.total ?? x.valor ?? 0),
@@ -86,11 +48,11 @@ export async function buscarFaturamentoMensal(padariaId) {
 export async function buscarInadimplencia(padariaId) {
   if (!padariaId) return [];
   try {
-    const json = await apiGet("/analitico/inadimplencia", {
-      padaria: padariaId,
+    const { data } = await http.get("/analitico/inadimplencia", {
+      params: { padaria: padariaId },
     });
-    const pag = Number(json?.pagantes ?? 0);
-    const inad = Number(json?.inadimplentes ?? 0);
+    const pag = Number(data?.pagantes ?? 0);
+    const inad = Number(data?.inadimplentes ?? 0);
     return [
       { name: "Pagantes", value: pag },
       { name: "Inadimplentes", value: inad },

@@ -79,12 +79,19 @@ export default function MapaEntregadores({ padariaId }) {
       if (!aliveRef.current) return;
       setEntregadores(normalizaLista(data));
     } catch (e) {
-      console.error("Erro ao buscar localização dos entregadores:", e);
-      if (!aliveRef.current) return;
-      setErro("Erro ao buscar localização dos entregadores.");
-      setEntregadores([]);
+      if (!alive.current) return;
+
+      const code = e?.response?.status ?? null;
+      if (code === 404 || code === 204) {
+        setEntregadores([]);
+        setErro(""); // sem aviso vermelho
+      } else {
+        console.error("Erro ao buscar localização dos entregadores:", e);
+        setErro("Erro ao buscar localização dos entregadores.");
+        setEntregadores([]);
+      }
     } finally {
-      if (aliveRef.current) setCarregando(false);
+      if (alive.current) setCarregando(false);
     }
   }
 

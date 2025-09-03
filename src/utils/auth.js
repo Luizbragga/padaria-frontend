@@ -44,3 +44,27 @@ export const getUsuario = () => {
     return null;
   }
 };
+// --- URL da API (igual ao resto do app)
+export const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
+
+// Libera a rota no backend (se houver token válido)
+export async function releaseRoute() {
+  try {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+    await fetch(`${API_URL}/rotas/release`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      // keepalive ajuda no fechamento da aba
+      keepalive: true,
+    });
+  } catch {
+    // silencioso: mesmo se falhar, seguimos com logout
+  }
+}
+
+// Faz release e limpa credenciais (sem navegar)
+export async function logoutAndRelease() {
+  await releaseRoute();
+  localStorage.clear(); // limpa token, refreshToken, usuario, etc.
+}

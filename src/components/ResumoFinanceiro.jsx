@@ -53,12 +53,9 @@ export default function ResumoFinanceiro({ padariaId }) {
     async function buscarResumo() {
       setCarregando(true);
       setErro("");
+
       try {
-        if (usuario?.role === "entregador") {
-          setResumo(null);
-          return;
-        }
-        if (!padariaId) {
+        if (usuario?.role === "entregador" || !padariaId) {
           setResumo(null);
           return;
         }
@@ -67,19 +64,36 @@ export default function ResumoFinanceiro({ padariaId }) {
           `${API_URL}/analitico/resumo-financeiro?padaria=${padariaId}`,
           { headers: { Authorization: `Bearer ${getToken()}` } }
         );
-        if (!resp.ok) throw new Error("Falha ao buscar resumo financeiro");
 
-        const dados = await resp.json();
-        if (!alive.current) return;
+        // Sem conteúdo ou não encontrado => trata como "sem dados", sem erro visual
+        if (resp.status === 204 || resp.status === 404) {
+          setResumo(null);
+          setErro(""); // não mostra banner vermelho
+          return;
+        }
 
-        setResumo(normalizaResumo(dados));
+        let dados = null;
+        try {
+          dados = await resp.json();
+        } catch {
+          dados = null;
+        }
+
+        // Qualquer resposta não-OK vira "sem dados" (silencioso)
+        if (!resp.ok) {
+          setResumo(null);
+          setErro(""); // não mostra banner vermelho
+          return;
+        }
+
+        setResumo(normalizaResumo(dados ?? {}));
       } catch (e) {
-        console.error("Erro ao buscar resumo financeiro:", e);
-        if (!alive.current) return;
-        setErro("Erro ao carregar resumo financeiro.");
+        // Falha de rede/rota ausente: mantém experiência limpa
+        console.error("Resumo financeiro:", e);
         setResumo(null);
+        setErro(""); // não poluir UI com erro quando não é crítico
       } finally {
-        if (alive.current) setCarregando(false);
+        setCarregando(false);
       }
     }
 

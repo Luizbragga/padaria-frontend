@@ -82,10 +82,18 @@ export default function RankingEntregadores({ padariaId }) {
           );
         setRanking(lista);
       } catch (e) {
-        console.error("Erro ao buscar ranking de entregadores:", e);
         if (!alive.current) return;
-        setErro("Erro ao carregar ranking de entregadores.");
-        setRanking([]);
+
+        const code = e?.response?.status ?? null;
+        // Sem dados / rota ainda não feita -> trata como estado vazio (sem erro visual)
+        if (code === 404 || code === 204) {
+          setRanking([]);
+          setErro(""); // não exibe texto vermelho
+        } else {
+          console.error("Erro ao buscar ranking de entregadores:", e);
+          setErro("Erro ao carregar ranking de entregadores.");
+          setRanking([]);
+        }
       } finally {
         if (alive.current) setCarregando(false);
       }
