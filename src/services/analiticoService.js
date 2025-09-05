@@ -1,5 +1,5 @@
 // src/services/analiticoService.js
-import http from "./http";
+import { http } from "./http";
 
 /* Helpers de normalização iguais aos que você já usava no arquivo antigo */
 function toArray(x) {
@@ -61,4 +61,81 @@ export async function buscarInadimplencia(padariaId) {
     console.error("buscarInadimplencia:", e);
     return [];
   }
+}
+
+/** GET /analitico/a-receber?padaria=<id>&mes=YYYY-MM */
+export async function buscarAReceber(padariaId, mes) {
+  try {
+    const params = {};
+    if (padariaId) params.padaria = padariaId;
+    if (mes) params.mes = mes;
+
+    const { data } = await http.get("/analitico/a-receber", { params });
+    return data; // { mes, previstoMes, pagoMes, pendenteAtual, pendenciaAnterior, totalPendente, clientes: [...] }
+  } catch (e) {
+    console.error("buscarAReceber:", e);
+    throw e;
+  }
+}
+
+/** GET /analitico/avulsas?padaria=<id>&mes=YYYY-MM */
+export async function listarAvulsasDoMes(padariaId, mes) {
+  try {
+    const params = {};
+    if (padariaId) params.padaria = padariaId;
+    if (mes) params.mes = mes;
+
+    const { data } = await http.get("/analitico/avulsas", { params });
+    return Array.isArray(data) ? data : [];
+  } catch (e) {
+    console.error("listarAvulsasDoMes:", e);
+    throw e;
+  }
+}
+
+/**
+ * GET /api/clientes/:id/padrao-semanal
+ * Retorna { clienteId, nome, padraoSemanal: { domingo: [...], ... } }
+ */
+export async function buscarPadraoSemanalCliente(clienteId) {
+  if (!clienteId) throw new Error("clienteId inválido");
+  const { data } = await http.get(`/api/clientes/${clienteId}/padrao-semanal`);
+  return data;
+}
+
+/**
+ * Pagamentos do mês para UM cliente.
+ * Usa /analitico/pagamentos e filtra pelo cliente no front.
+ * Retorna { total, pagamentos: [...] }
+ */
+export async function buscarPagamentosDoMesCliente(padariaId, clienteId, mes) {
+  if (!padariaId || !clienteId) {
+    throw new Error("padariaId/clienteId inválidos");
+  }
+  const [y, m] = String(mes || "")
+    .split("-")
+    .map(Number);
+  if (!y || !m) throw new Error("mes inválido (use 'YYYY-MM')");
+
+  const last = new Date(y, m, 0).getDate();
+  const dataInicial = `${y}-${String(m).padStart(2, "0")}-01`;
+  const dataFinal = `${y}-${String(m).padStart(2, "0")}-${String(last).padStart(
+    2,
+    "0"
+  )}`;
+
+  const { data } = await http.get("/analitico/pagamentos", {
+    params: {
+      padaria: padariaId,
+      dataInicial,
+      dataFinal,
+      forma: "todas",
+    },
+  });
+
+  const todos = Array.isArray(data?.pagamentos) ? data.pagamentos : [];
+  const itens = todos.filter((p) => String(p.cliente) === String(clienteId));
+  const total = itens.reduce((s, p) => s + (Number(p.valor) || 0), 0);
+
+  return { total, pagamentos: itens };
 }

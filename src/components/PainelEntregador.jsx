@@ -1,11 +1,16 @@
 // src/components/PainelEntregador.jsx
 import { useEffect, useMemo, useState } from "react";
 import { getToken, getUsuario } from "../utils/auth";
-import axios from "axios";
+import {
+  concluirEntrega as svcConcluirEntrega,
+  registrarPagamento as svcRegistrarPagamento,
+  listarMinhasEntregas,
+} from "../services/entregaService";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 import { useNavigate } from "react-router-dom";
+import { get as httpGet, post as httpPost } from "../services/http";
 
 /* -------- helpers -------- */
 function normalizeEntregas(data) {
@@ -33,6 +38,9 @@ L.Icon.Default.mergeOptions({
   shadowUrl:
     "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png",
 });
+
+// id pode vir como _id, id, entregaId...
+const getEntregaId = (e) => e?._id || e?.id || e?.entregaId || null;
 
 export default function PainelEntregador() {
   /* -------- estados -------- */
@@ -67,17 +75,18 @@ export default function PainelEntregador() {
   );
 
   /* -------- API: entregas do entregador -------- */
+  // dentro de PainelEntregador.jsx
   async function carregarEntregas() {
     setCarregando(true);
     setErro("");
     try {
-      const token = getToken();
-      const { data } = await axios.get(`${API_URL}/rota-entregador`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const lista = normalizeEntregas(data);
-      setEntregas(lista);
-      // ao refazer fetch, zera “ocultas” (estado local)
+      const lista = await listarMinhasEntregas();
+      console.log(
+        "[UI] entregas carregadas:",
+        Array.isArray(lista) ? lista.length : 0,
+        lista?.[0]
+      );
+      setEntregas(Array.isArray(lista) ? lista : []);
       setOcultas(new Set());
       return lista;
     } catch (err) {
@@ -99,16 +108,18 @@ export default function PainelEntregador() {
     try {
       setCarregandoRotas(true);
       setErroClaim("");
-      const token = getToken();
-      const { data } = await axios.get(`${API_URL}/rotas/disponiveis`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      setRotas(Array.isArray(data) ? data : []);
+
+      // usa cliente central (adiciona Authorization automaticamente)
+      const data = await httpGet("/rotas/disponiveis");
+
+      // aceita tanto [{...}] quanto { rotas: [...] }
+      setRotas(Array.isArray(data) ? data : data?.rotas ?? []);
     } catch (e) {
       console.error("Falha ao listar rotas:", e);
       setRotas([]);
       setErroClaim(
         e?.response?.data?.erro ||
+          e?.message ||
           "Não foi possível listar as rotas neste momento."
       );
     } finally {
@@ -120,12 +131,10 @@ export default function PainelEntregador() {
   async function assumirRota(rota) {
     try {
       setErroClaim("");
-      const token = getToken();
-      await axios.post(
-        `${API_URL}/rotas/claim`,
-        { rota },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+
+      // usa cliente central
+      await httpPost("/rotas/claim", { rota });
+
       setMostrarModalRota(false);
       await carregarEntregas();
     } catch (e) {
@@ -135,28 +144,7 @@ export default function PainelEntregador() {
           ? "Rota já em execução, por favor selecione outra rota."
           : "Falha ao assumir rota.");
       setErroClaim(msg);
-      listarRotas(); // atualiza — pode ter mudado no clique
-    }
-  }
-
-  /* -------- trocar rota (libera + volta ao modal) -------- */
-  async function handleTrocarRota() {
-    try {
-      const token = getToken();
-      if (token) {
-        await fetch(`${API_URL}/rotas/release`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${token}` },
-          keepalive: true,
-        });
-      }
-    } catch (e) {
-      console.error("Falha ao liberar rota ao trocar:", e);
-    } finally {
-      setEntregas([]);
-      setOcultas(new Set());
-      setMostrarModalRota(true);
-      listarRotas();
+      listarRotas(); // atualiza lista após erro
     }
   }
 
@@ -165,11 +153,7 @@ export default function PainelEntregador() {
     try {
       const token = getToken();
       if (token) {
-        await fetch(`${API_URL}/rotas/release`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${token}` },
-          keepalive: true,
-        });
+        await httpPost("/rotas/release");
       }
     } catch (e) {
       console.error("Falha ao liberar rota no logout:", e);
@@ -196,16 +180,10 @@ export default function PainelEntregador() {
   useEffect(() => {
     if (mostrarModalRota) return;
     const id = setInterval(() => {
-      const token = getToken();
-      if (!token) return;
-      fetch(`${API_URL}/rotas/ping`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-        keepalive: true,
-      }).catch(() => {});
+      httpPost("/rotas/ping").catch(() => {});
     }, 60 * 1000);
     return () => clearInterval(id);
-  }, [mostrarModalRota, API_URL]);
+  }, [mostrarModalRota]);
 
   /* -------- contadores -------- */
   const hoje = new Date();
@@ -236,28 +214,17 @@ export default function PainelEntregador() {
   /* -------- ações de entrega -------- */
   async function marcarComoEntregue(id) {
     try {
-      const token = getToken();
-      const { data } = await axios.put(
-        `${API_URL}/entregas/${id}/concluir`,
-        {},
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-
-      // 1) marca como entregue no estado (contadores)
-      setEntregas((prev) =>
-        (Array.isArray(prev) ? prev : []).map((e) =>
-          e._id === id ? { ...e, entregue: true } : e
-        )
-      );
-
-      // 2) some do mapa imediatamente
+      if (!id) {
+        console.warn("Sem id na entrega");
+        return;
+      }
+      await svcConcluirEntrega(id);
       setOcultas((prev) => {
         const next = new Set(prev);
         next.add(id);
         return next;
       });
-
-      console.log("✅ Entrega concluída:", data);
+      await carregarEntregas(); // ✅ sincroniza com backend
     } catch (err) {
       console.error("❌ ERRO ao concluir entrega:", err);
     }
@@ -265,37 +232,34 @@ export default function PainelEntregador() {
 
   async function registrarPagamento(id, valor, observacao) {
     const numero = Number(valor);
+    if (!id) {
+      console.warn("Sem id na entrega");
+      return;
+    }
     if (!Number.isFinite(numero) || numero < 0) return;
 
     try {
-      const token = getToken();
-      await axios.post(
-        `${API_URL}/entregas/${id}/registrar-pagamento`,
-        {
-          valor: numero,
-          forma: observacao?.trim() || "dinheiro",
-        },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      await svcRegistrarPagamento(id, {
+        valor: numero,
+        forma: (observacao?.trim() || "dinheiro").toLowerCase(),
+      });
 
-      // 1) marca como entregue (contadores)
-      setEntregas((prev) =>
-        (Array.isArray(prev) ? prev : []).map((e) =>
-          e._id === id ? { ...e, entregue: true } : e
-        )
-      );
-
-      // 2) some do mapa imediatamente
       setOcultas((prev) => {
         const next = new Set(prev);
         next.add(id);
         return next;
       });
+
+      await carregarEntregas(); // ✅ sincroniza com backend
     } catch (err) {
       console.error("Erro ao registrar pagamento:", err);
     }
   }
 
+  const handleTrocarRota = () => {
+    setMostrarModalRota(true);
+    listarRotas();
+  };
   /* -------- header -------- */
   const Header = (
     <div className="flex items-center justify-between mb-4" style={{ gap: 8 }}>
@@ -359,7 +323,8 @@ export default function PainelEntregador() {
           attribution="&copy; OpenStreetMap contributors"
         />
 
-        {pendentesList.map((entrega) => {
+        {pendentesList.map((entrega, i) => {
+          const id = getEntregaId(entrega); // ✅ id robusto
           const lat = entrega?.location?.lat;
           const lng = entrega?.location?.lng;
           const pos =
@@ -377,28 +342,12 @@ export default function PainelEntregador() {
               : entrega?.cliente?.nome || "Cliente";
 
           return (
-            <Marker key={entrega._id} position={pos}>
+            <Marker key={id || i} position={pos}>
               <Popup>
-                <strong>{clienteLabel}</strong>
-                <ul className="mt-1">
-                  {produtos.map((p, i) => {
-                    const nome =
-                      p?.nome ??
-                      p?.produto?.nome ??
-                      p?.produtoNome ??
-                      "produto";
-                    const qtd = p?.quantidade ?? 1;
-                    return (
-                      <li key={i}>
-                        {qtd}x {nome}
-                      </li>
-                    );
-                  })}
-                </ul>
-
+                {/* ... */}
                 <button
                   className="bg-green-600 text-white px-2 py-1 rounded mt-2 w-full"
-                  onClick={() => marcarComoEntregue(entrega._id)}
+                  onClick={() => marcarComoEntregue(id)}
                 >
                   ✅ Entregar
                 </button>
@@ -408,23 +357,23 @@ export default function PainelEntregador() {
                   onClick={() =>
                     setMostrarFormulario((prev) => ({
                       ...prev,
-                      [entrega._id]: !prev[entrega._id],
+                      [id]: !prev[id],
                     }))
                   }
                 >
                   💰 Registrar Pagamento
                 </button>
 
-                {mostrarFormulario[entrega._id] && (
+                {mostrarFormulario[id] && (
                   <div className="mt-2">
                     <input
                       type="number"
                       min={0}
-                      value={valoresPagamentos[entrega._id] ?? ""}
+                      value={valoresPagamentos[id] ?? ""}
                       onChange={(e) =>
                         setValoresPagamentos((prev) => ({
                           ...prev,
-                          [entrega._id]: Math.max(0, Number(e.target.value)),
+                          [id]: Math.max(0, Number(e.target.value)),
                         }))
                       }
                       placeholder="Valor pago"
@@ -432,11 +381,11 @@ export default function PainelEntregador() {
                     />
                     <input
                       type="text"
-                      value={obsPagamentos[entrega._id] ?? ""}
+                      value={obsPagamentos[id] ?? ""}
                       onChange={(e) =>
                         setObsPagamentos((prev) => ({
                           ...prev,
-                          [entrega._id]: e.target.value,
+                          [id]: e.target.value,
                         }))
                       }
                       placeholder="Observações (ex: cartão)"
@@ -446,9 +395,9 @@ export default function PainelEntregador() {
                       className="bg-blue-600 text-white px-2 py-1 rounded mt-2 w-full"
                       onClick={() =>
                         registrarPagamento(
-                          entrega._id,
-                          valoresPagamentos[entrega._id],
-                          obsPagamentos[entrega._id]
+                          id,
+                          valoresPagamentos[id],
+                          obsPagamentos[id]
                         )
                       }
                     >

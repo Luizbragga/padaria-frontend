@@ -1,7 +1,7 @@
 // src/pages/Login.jsx  (ou o caminho onde está seu Login)
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { post } from "../services/api"; // <= novo serviço
+import { post } from "../services/api";
 
 export default function Login() {
   const [usuario, setUsuario] = useState("");

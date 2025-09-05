@@ -14,8 +14,18 @@ import MapaEntregadores from "../components/MapaEntregadores";
 import NotificacoesRecentes from "../components/NotificacoesRecentes";
 import PainelEntregador from "../components/PainelEntregador";
 import PagamentosFiltrados from "../components/PagamentosFiltrados";
+import AReceberPainel from "../components/AReceberPainel";
+import AvulsasModal from "../components/AvulsasModal";
 
 import { getUsuario } from "../utils/auth";
+
+// helper local p/ "YYYY-MM"
+function mesAtualStr() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  return `${y}-${m}`;
+}
 
 export default function Painel() {
   const location = useLocation();
@@ -27,12 +37,17 @@ export default function Painel() {
   const [role, setRole] = useState(null);
   const [tokenProcessado, setTokenProcessado] = useState(false);
 
+  // estado de filtros de pagamentos
   const [filtros, setFiltros] = useState({
     dataInicial: "",
     dataFinal: "",
     // padronize SEM acento para o backend: dinheiro | cartao | mbway
     forma: "",
   });
+
+  // estado de "A Receber"
+  const [mesAReceber, setMesAReceber] = useState(mesAtualStr());
+  const [avulsasOpen, setAvulsasOpen] = useState(false);
 
   const handleChange = (e) => {
     setFiltros((prev) => ({ ...prev, [e.target.name]: e.target.value }));
@@ -42,7 +57,6 @@ export default function Painel() {
   useEffect(() => {
     const usuario = getUsuario();
     if (!usuario) {
-      // se não tiver usuário, volta para a tela de login/raiz
       navigate("/", { replace: true });
       return;
     }
@@ -57,32 +71,29 @@ export default function Painel() {
         setPadariaId(null);
       }
     } else {
-      // gerente / operador / etc: sempre a padaria do usuário
+      // gerente / operador / entregador: sempre a padaria do usuário
       setPadariaId(usuario.padaria || null);
     }
 
     setTokenProcessado(true);
   }, [padariaQueryId, navigate]);
 
-  // 2) Enquanto processa token, não renderiza (evita flicker)
+  // 2) Enquanto processa token, não renderiza
   if (!tokenProcessado) return null;
 
-  // 3) Admin sem padaria selecionada: mostra lista (com callback opcional)
+  // 3) Admin sem padaria selecionada: mostra lista
   if (role === "admin" && !padariaId) {
     const handleSelecionarPadaria = (id) => {
-      // Atualiza estado e URL (?padaria=...)
       setPadariaId(id);
       navigate(`?padaria=${id}`, { replace: true });
     };
-
-    // Se seu ListaPadarias ainda não aceita esse onSelect, ele é opcional.
     return <ListaPadarias onSelect={handleSelecionarPadaria} />;
   }
 
-  // 4) Se ainda não temos padariaId (por qualquer motivo), não renderiza
+  // 4) Se ainda não temos padariaId, não renderiza
   if (!padariaId) return null;
 
-  // 5) Entregador usa o painel dedicado
+  // 5) Entregador usa painel dedicado
   if (role === "entregador") {
     return <PainelEntregador />;
   }
@@ -105,7 +116,15 @@ export default function Painel() {
       </header>
 
       <main className="p-6 max-w-4xl mx-auto">
-        {/* Faturamento Mensal (geral da padaria) */}
+        {/* A Receber (com controle de mês e avulsas) */}
+        <AReceberPainel
+          padariaId={padariaId}
+          mes={mesAReceber}
+          onChangeMes={setMesAReceber}
+          onOpenAvulsas={() => setAvulsasOpen(true)}
+        />
+
+        {/* Faturamento Mensal (somatório de pagamentos por mês) */}
         <FaturamentoMensal padariaId={padariaId} />
 
         {/* FILTROS DE PAGAMENTOS */}
@@ -152,7 +171,7 @@ export default function Painel() {
           </div>
         </div>
 
-        {/* LISTAGEM DE PAGAMENTOS (agora com padariaId) */}
+        {/* LISTAGEM DE PAGAMENTOS */}
         <PagamentosFiltrados
           padariaId={padariaId}
           dataInicial={filtros.dataInicial}
@@ -170,6 +189,14 @@ export default function Painel() {
         <MapaEntregadores padariaId={padariaId} />
         <NotificacoesRecentes padariaId={padariaId} />
       </main>
+
+      {/* Modal de Avulsas do mês */}
+      <AvulsasModal
+        open={avulsasOpen}
+        onClose={() => setAvulsasOpen(false)}
+        padariaId={padariaId}
+        mes={mesAReceber}
+      />
     </div>
   );
 }

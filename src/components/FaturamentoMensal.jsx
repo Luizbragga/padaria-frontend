@@ -10,6 +10,7 @@ import {
   Tooltip,
   ResponsiveContainer,
   CartesianGrid,
+  ReferenceLine,
 } from "recharts";
 
 const fmtEUR = new Intl.NumberFormat("pt-PT", {
@@ -25,14 +26,12 @@ export default function FaturamentoMensal({ padariaId }) {
   const usuario = getUsuario();
   const role = usuario?.role ?? null;
 
-  // evita setState pós-unmount
   const alive = useRef(true);
 
   async function carregar() {
     setCarregando(true);
     setErro("");
 
-    // oculto para entregador ou sem padaria
     if (role === "entregador" || !padariaId) {
       setDados([]);
       setCarregando(false);
@@ -42,9 +41,7 @@ export default function FaturamentoMensal({ padariaId }) {
     try {
       const dadosAPI = await buscarFaturamentoMensal(padariaId);
       if (!alive.current) return;
-      // esperamos algo como [{ mes: '2025-08', valorTotal: 123.45 }, ...]
-      const arr = Array.isArray(dadosAPI) ? dadosAPI : [];
-      setDados(arr);
+      setDados(Array.isArray(dadosAPI) ? dadosAPI : []);
     } catch (e) {
       console.error("Erro ao buscar faturamento mensal:", e);
       if (!alive.current) return;
@@ -68,6 +65,27 @@ export default function FaturamentoMensal({ padariaId }) {
     () => dados.reduce((acc, d) => acc + (Number(d?.valorTotal) || 0), 0),
     [dados]
   );
+
+  // ----- Escala Y: topo = máximo real; majors = 50 em 50 (+ topo); minors = 10 em 10 -----
+  const { max, majorTicks, minorTicks } = useMemo(() => {
+    const valores = (Array.isArray(dados) ? dados : []).map(
+      (d) => Number(d?.valorTotal) || 0
+    );
+    const m = Math.max(0, ...valores);
+
+    // majors: 0, 50, 100, ... e inclui o topo m (mesmo se não for múltiplo de 50)
+    const majors = [0];
+    for (let v = 50; v < m; v += 50) majors.push(v);
+    if (majors.at(-1) !== m) majors.push(m);
+
+    // minors: 10,20,30,40,60,70,80,90, ... até m (exclui múltiplos de 50)
+    const minors = [];
+    for (let v = 10; v < m; v += 10) {
+      if (v % 50 !== 0) minors.push(v);
+    }
+
+    return { max: m, majorTicks: majors, minorTicks: minors };
+  }, [dados]);
 
   return (
     <div className="bg-white shadow rounded p-6 mt-6">
@@ -96,6 +114,7 @@ export default function FaturamentoMensal({ padariaId }) {
           <p className="text-sm text-gray-500 mb-2">
             Total no período: <strong>{fmtEUR.format(total)}</strong>
           </p>
+
           <div style={{ width: "100%", height: 300 }}>
             <ResponsiveContainer>
               <BarChart
@@ -103,12 +122,60 @@ export default function FaturamentoMensal({ padariaId }) {
                 margin={{ top: 8, right: 12, left: 0, bottom: 8 }}
               >
                 <CartesianGrid strokeDasharray="3 3" />
+
                 <XAxis dataKey="mes" />
-                <YAxis tickFormatter={(v) => fmtEUR.format(v)} />
+
+                {/* Eixo Y sem rótulos próprios (vamos rotular via ReferenceLine) */}
+                <YAxis
+                  type="number"
+                  domain={[0, max]}
+                  tick={false}
+                  axisLine={{ stroke: "#D1D5DB" }}
+                  width={72} // dá espaço aos rótulos “manuais”
+                />
+
+                {/* Linhas menores (10 em 10) — sem rótulo */}
+                {minorTicks.map((y) => (
+                  <ReferenceLine
+                    key={`minor-${y}`}
+                    y={y}
+                    stroke="#E5E7EB"
+                    strokeDasharray="3 3"
+                    ifOverflow="extendDomain"
+                  />
+                ))}
+
+                {/* Linhas maiores (0, 50, 100, ... e topo) — com rótulo formatado */}
+                {majorTicks.map((y) => (
+                  <ReferenceLine
+                    key={`major-${y}`}
+                    y={y}
+                    stroke="#D1D5DB"
+                    ifOverflow="extendDomain"
+                    label={({ viewBox }) => {
+                      const { x, y: yy } = viewBox || {};
+                      return (
+                        <text
+                          x={(x ?? 0) - 8}
+                          y={yy}
+                          dy={3}
+                          textAnchor="end"
+                          fontSize={12}
+                          fontWeight={y === max ? 700 : 700} // pode pôr 900 no topo se quiser
+                          fill="#111827"
+                        >
+                          {fmtEUR.format(y)}
+                        </text>
+                      );
+                    }}
+                  />
+                ))}
+
                 <Tooltip
                   formatter={(value) => fmtEUR.format(value)}
                   labelFormatter={(label) => `Mês: ${label}`}
                 />
+
                 <Bar
                   dataKey="valorTotal"
                   fill="#4ade80"

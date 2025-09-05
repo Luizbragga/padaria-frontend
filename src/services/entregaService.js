@@ -1,24 +1,17 @@
 // src/services/entregaService.js
-import axios from "axios";
-import { getToken } from "../utils/auth";
+import { http } from "./http";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
-
-function auth() {
-  return { Authorization: `Bearer ${getToken()}` };
-}
-
-/** Entregas em tempo real (dashboard gerente) */
+/**
+ * Entregas em tempo real (dashboard gerente)
+ * GET /analitico/entregas-tempo-real?padaria=...
+ */
 export async function buscarEntregasTempoReal(padariaId) {
-  if (!padariaId || !getToken()) return [];
+  if (!padariaId) return [];
   try {
-    const { data } = await axios.get(
-      `${API_URL}/analitico/entregas-tempo-real`,
-      {
-        headers: auth(),
-        params: { padaria: padariaId },
-      }
-    );
+    const { data } = await http.get("/analitico/entregas-tempo-real", {
+      params: { padaria: padariaId },
+    });
+    // backend pode devolver [{...}] ou { entregas:[...] }
     return Array.isArray(data) ? data : data?.entregas ?? [];
   } catch (e) {
     console.error("buscarEntregasTempoReal:", e);
@@ -26,27 +19,55 @@ export async function buscarEntregasTempoReal(padariaId) {
   }
 }
 
-/** Minhas entregas (tabela do entregador) */
+/**
+ * Minhas entregas (entregador)
+ * Tenta rota nova /rota-entregador e faz fallback para /entregas/minhas
+ */
 export async function listarMinhasEntregas() {
-  if (!getToken()) return [];
   try {
-    const { data } = await axios.get(`${API_URL}/entregas/minhas`, {
-      headers: auth(),
-    });
+    const { data } = await http.get("/entregas/minhas"); // ✅ _id da coleção Entregas
     return Array.isArray(data) ? data : data?.entregas ?? [];
-  } catch (e) {
-    console.error("listarMinhasEntregas:", e);
-    return [];
+  } catch {
+    // fallback legado (se existir no backend)
+    try {
+      const { data } = await http.get("/rota-entregador");
+      return Array.isArray(data) ? data : data?.entregas ?? [];
+    } catch (e) {
+      console.error("listarMinhasEntregas:", e);
+      return [];
+    }
   }
 }
 
-/* Opcional (para usarmos depois e remover axios direto do componente):
+/**
+ * Concluir entrega
+ * PUT /entregas/:id/concluir
+ */
 export async function concluirEntrega(id) {
-  const { data } = await axios.put(`${API_URL}/entregas/${id}/concluir`, {}, { headers: auth() });
-  return data;
+  if (!id) return null;
+  try {
+    const { data } = await http.put(`/entregas/${id}/concluir`, {});
+    return data;
+  } catch (e) {
+    console.error("concluirEntrega:", e);
+    throw e;
+  }
 }
+
+/**
+ * Registrar pagamento
+ * POST /entregas/:id/registrar-pagamento  { valor, forma }
+ */
 export async function registrarPagamento(id, { valor, forma }) {
-  const { data } = await axios.post(`${API_URL}/entregas/${id}/registrar-pagamento`, { valor, forma }, { headers: auth() });
-  return data;
+  if (!id) return null;
+  try {
+    const { data } = await http.post(`/entregas/${id}/registrar-pagamento`, {
+      valor,
+      forma,
+    });
+    return data;
+  } catch (e) {
+    console.error("registrarPagamento:", e);
+    throw e;
+  }
 }
-*/
