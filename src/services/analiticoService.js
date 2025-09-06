@@ -1,7 +1,7 @@
 // src/services/analiticoService.js
 import { http } from "./http";
 
-/* Helpers de normalização iguais aos que você já usava no arquivo antigo */
+/* Helpers */
 function toArray(x) {
   return Array.isArray(x) ? x : [];
 }
@@ -71,7 +71,7 @@ export async function buscarAReceber(padariaId, mes) {
     if (mes) params.mes = mes;
 
     const { data } = await http.get("/analitico/a-receber", { params });
-    return data; // { mes, previstoMes, pagoMes, pendenteAtual, pendenciaAnterior, totalPendente, clientes: [...] }
+    return data;
   } catch (e) {
     console.error("buscarAReceber:", e);
     throw e;
@@ -86,10 +86,15 @@ export async function listarAvulsasDoMes(padariaId, mes) {
     if (mes) params.mes = mes;
 
     const { data } = await http.get("/analitico/avulsas", { params });
-    return Array.isArray(data) ? data : [];
+    // backend retorna: { mes, total, avulsas: [...] }
+    return {
+      mes: data?.mes ?? mes ?? "",
+      total: Number(data?.total ?? 0),
+      itens: Array.isArray(data?.avulsas) ? data.avulsas : [],
+    };
   } catch (e) {
     console.error("listarAvulsasDoMes:", e);
-    throw e;
+    return { mes: mes ?? "", total: 0, itens: [] };
   }
 }
 
@@ -138,4 +143,46 @@ export async function buscarPagamentosDoMesCliente(padariaId, clienteId, mes) {
   const total = itens.reduce((s, p) => s + (Number(p.valor) || 0), 0);
 
   return { total, pagamentos: itens };
+}
+
+/** GET /analitico/pagamentos – detalhado com filtros */
+export async function buscarPagamentosDetalhados({
+  padariaId,
+  dataInicial,
+  dataFinal,
+  dataEspecifica,
+  forma,
+}) {
+  const params = {};
+  if (padariaId) params.padaria = padariaId;
+
+  if (dataEspecifica) {
+    params.dataEspecifica = dataEspecifica; // YYYY-MM-DD
+  } else {
+    if (dataInicial) params.dataInicial = dataInicial;
+    if (dataFinal) params.dataFinal = dataFinal;
+  }
+
+  if (forma && forma !== "") params.forma = forma;
+
+  const { data } = await http.get("/analitico/pagamentos", { params });
+  return data; // { pagamentos, totalRecebido, clientesPagantes }
+}
+// Registrar pagamento diretamente para um cliente (usado pelo gerente no painel)
+export async function registrarPagamentoCliente(
+  clienteId,
+  { valor, forma, data, mes }
+) {
+  if (!clienteId) throw new Error("clienteId é obrigatório");
+  const payload = {
+    valor: Number(valor),
+    forma,
+    data, // "YYYY-MM-DD"
+    mes, // opcional; o backend pode usar para conciliação no mês
+  };
+  const { data: resp } = await http.post(
+    `/clientes/${clienteId}/registrar-pagamento`,
+    payload
+  );
+  return resp;
 }

@@ -11,7 +11,6 @@ export async function buscarEntregasTempoReal(padariaId) {
     const { data } = await http.get("/analitico/entregas-tempo-real", {
       params: { padaria: padariaId },
     });
-    // backend pode devolver [{...}] ou { entregas:[...] }
     return Array.isArray(data) ? data : data?.entregas ?? [];
   } catch (e) {
     console.error("buscarEntregasTempoReal:", e);
@@ -21,14 +20,12 @@ export async function buscarEntregasTempoReal(padariaId) {
 
 /**
  * Minhas entregas (entregador)
- * Tenta rota nova /rota-entregador e faz fallback para /entregas/minhas
  */
 export async function listarMinhasEntregas() {
   try {
-    const { data } = await http.get("/entregas/minhas"); // ✅ _id da coleção Entregas
+    const { data } = await http.get("/entregas/minhas");
     return Array.isArray(data) ? data : data?.entregas ?? [];
   } catch {
-    // fallback legado (se existir no backend)
     try {
       const { data } = await http.get("/rota-entregador");
       return Array.isArray(data) ? data : data?.entregas ?? [];
@@ -55,7 +52,7 @@ export async function concluirEntrega(id) {
 }
 
 /**
- * Registrar pagamento
+ * Registrar pagamento de UMA entrega
  * POST /entregas/:id/registrar-pagamento  { valor, forma }
  */
 export async function registrarPagamento(id, { valor, forma }) {
@@ -70,4 +67,26 @@ export async function registrarPagamento(id, { valor, forma }) {
     console.error("registrarPagamento:", e);
     throw e;
   }
+}
+
+/**
+ * ✅ Registrar pagamento direto para um CLIENTE (uso do gerente)
+ * POST /clientes/:clienteId/registrar-pagamento  { valor, forma, data, mes }
+ */
+export async function registrarPagamentoCliente(
+  clienteId,
+  { valor, forma, data, mes }
+) {
+  if (!clienteId) throw new Error("clienteId é obrigatório");
+  const payload = {
+    valor: Number(valor),
+    forma,
+    data, // "YYYY-MM-DD"
+    mes, // opcional, ajuda a conciliar no mês
+  };
+  const { data: resp } = await http.post(
+    `/clientes/${clienteId}/registrar-pagamento`,
+    payload
+  );
+  return resp;
 }

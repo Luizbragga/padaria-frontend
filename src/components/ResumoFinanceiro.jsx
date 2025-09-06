@@ -109,36 +109,4 @@ export default function ResumoFinanceiro({ padariaId }) {
     return <p className="text-gray-500">Carregando resumo financeiro...</p>;
   if (erro) return <p className="text-red-600">{erro}</p>;
   if (!resumo) return <p className="text-gray-500">Nenhum dado disponível.</p>;
-
-  return (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 my-6">
-      <Card
-        valor={resumo.totalRecebido}
-        label="Total Recebido"
-        tipo="currency"
-        cor="text-green-600"
-      />
-      <Card
-        valor={resumo.totalPendente}
-        label="Total Pendente"
-        tipo="currency"
-        cor="text-red-600"
-      />
-      <Card
-        valor={resumo.clientesPagantes}
-        label="Clientes Pagantes"
-        tipo="integer"
-        cor="text-blue-600"
-      />
-    </div>
-  );
-}
-
-function Card({ valor, label, cor, tipo = "currency" }) {
-  return (
-    <div className="bg-white shadow rounded p-4">
-      <p className="text-sm text-gray-500">{label}</p>
-      <p className={`text-2xl font-bold ${cor}`}>{formatValue(valor, tipo)}</p>
-    </div>
-  );
 }

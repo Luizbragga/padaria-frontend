@@ -1,181 +1,288 @@
 // src/components/PagamentosFiltrados.jsx
-import React, { useEffect, useRef, useState } from "react";
-import axios from "axios";
-import { getToken } from "../utils/auth";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import {
+  buscarPagamentosDetalhados,
+  buscarAReceber,
+} from "../services/analiticoService";
 
-const API_URL = import.meta.env.VITE_API_URL ?? "";
+const fmtEUR = new Intl.NumberFormat("pt-PT", {
+  style: "currency",
+  currency: "EUR",
+});
 
-function formatEUR(n) {
-  return new Intl.NumberFormat("pt-PT", {
-    style: "currency",
-    currency: "EUR",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(Number(n) || 0);
-}
-
-function normalizaResposta(input) {
-  const src = input?.data ?? input ?? {};
-  const lista = Array.isArray(src.pagamentos)
-    ? src.pagamentos
-    : Array.isArray(src.data)
-    ? src.data
-    : [];
-
-  const pagamentos = lista
-    .map((p, i) => {
-      const id = p?._id || p?.id || `p_${i}`;
-      const cliente =
-        typeof p?.cliente === "string"
-          ? p.cliente
-          : p?.cliente?.nome || p?.clienteNome || "Cliente";
-      const entregador =
-        typeof p?.entregador === "string"
-          ? p.entregador
-          : p?.entregador?.nome || p?.entregadorNome || "—";
-      const valor = Number(p?.valor ?? p?.amount ?? 0) || 0;
-      const forma = (
-        p?.forma ??
-        p?.metodo ??
-        p?.metodoPagamento ??
-        ""
-      ).toString();
-      const data = p?.data || p?.createdAt || p?.updatedAt || null;
-      return { id, cliente, entregador, valor, forma, data };
-    })
-    .sort((a, b) => new Date(b.data || 0) - new Date(a.data || 0));
-
-  return {
-    pagamentos,
-    totalRecebido: Number(src.totalRecebido ?? src.total ?? 0) || 0,
-    clientesPagantes: Number(src.clientesPagantes ?? src.pagantes ?? 0) || 0,
-  };
+// helper para YYYY-MM (mês corrente)
+function mesAtualStr() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  return `${y}-${m}`;
 }
 
 export default function PagamentosFiltrados({
-  dataInicial,
-  dataFinal,
-  forma,
   padariaId,
+  dataEspecifica = "",
+  dataInicial = "",
+  dataFinal = "",
+  forma = "",
 }) {
-  const [pagamentos, setPagamentos] = useState([]);
-  const [totalRecebido, setTotalRecebido] = useState(0);
-  const [clientesPagantes, setClientesPagantes] = useState(0);
+  // ⚠️ TODOS os hooks ficam DENTRO do componente:
+  const [filtros, setFiltros] = useState({
+    dataEspecifica,
+    dataInicial,
+    dataFinal,
+    forma,
+  });
+
+  const [lista, setLista] = useState([]); // pagamentos filtrados
+  const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState("");
-  const [carregando, setCarregando] = useState(true);
-  const aliveRef = useRef(true);
 
-  useEffect(() => {
-    aliveRef.current = true;
-    return () => {
-      aliveRef.current = false;
-    };
-  }, []);
+  // resumo (cartões do topo do bloco)
+  const [resumoMes, setResumoMes] = useState({
+    totalRecebidoMes: 0,
+    pendenciaAnterior: 0,
+    inadimplentes: 0,
+  });
 
+  const vivo = useRef(true);
+  const mesAtual = mesAtualStr();
+
+  // handlers
+  function onChangeFiltro(e) {
+    setFiltros((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+  }
+
+  const aplicouFiltro = useMemo(() => {
+    const f = filtros;
+    return Boolean(f.dataEspecifica || f.dataInicial || f.dataFinal || f.forma);
+  }, [filtros]);
+
+  // carrega o resumo (sem depender de filtros)
   useEffect(() => {
-    async function buscarPagamentos() {
-      setCarregando(true);
+    vivo.current = true;
+
+    async function carregarResumo() {
+      if (!padariaId) return;
       try {
-        const token = getToken();
-        const params = {};
+        const ar = await buscarAReceber(padariaId, mesAtual);
+        if (!vivo.current) return;
 
-        if (dataInicial) params.dataInicial = dataInicial;
-        if (dataFinal) params.dataFinal = dataFinal;
-        if (forma && forma.toLowerCase() !== "todas")
-          params.forma = forma.toLowerCase();
-        if (padariaId) params.padaria = padariaId;
-
-        const resp = await axios.get(`${API_URL}/analitico/pagamentos`, {
-          headers: { Authorization: `Bearer ${token}` },
-          params,
+        setResumoMes({
+          totalRecebidoMes: Number(ar?.pagoMes || 0), // inclui avulsas
+          pendenciaAnterior: Number(ar?.pendenciaAnterior || 0),
+          inadimplentes: Number(ar?.inadimplentes || 0), // só pendentes de meses anteriores
         });
-
-        if (!aliveRef.current) return;
-        const norm = normalizaResposta(resp.data);
-
-        setPagamentos(norm.pagamentos);
-        setTotalRecebido(norm.totalRecebido);
-        setClientesPagantes(norm.clientesPagantes);
-        setErro("");
-      } catch (err) {
-        if (!aliveRef.current) return;
-
-        const status = err?.response?.status;
-        console.error(
-          "Erro ao buscar pagamentos:",
-          status,
-          err?.response?.data || err?.message
-        );
-
-        // Tratar "sem dados" como vazio silencioso (sem banner de erro)
-        if (status === 404 || status === 204 || status === 422) {
-          setErro("");
-        } else {
-          setErro("Erro ao buscar pagamentos");
-        }
-
-        setPagamentos([]);
-        setTotalRecebido(0);
-        setClientesPagantes(0);
-      } finally {
-        if (aliveRef.current) setCarregando(false);
+      } catch (e) {
+        console.error("Erro no resumo de pagamentos:", e);
+        if (!vivo.current) return;
+        setResumoMes({
+          totalRecebidoMes: 0,
+          pendenciaAnterior: 0,
+          inadimplentes: 0,
+        });
       }
     }
 
-    buscarPagamentos();
-  }, [dataInicial, dataFinal, forma, padariaId]);
+    carregarResumo();
+    return () => {
+      vivo.current = false;
+    };
+  }, [padariaId, mesAtual]);
+
+  // busca a listagem quando filtros mudam
+  useEffect(() => {
+    vivo.current = true;
+
+    async function carregarLista() {
+      if (!padariaId || !aplicouFiltro) {
+        setLista([]);
+        setErro("");
+        return;
+      }
+      setCarregando(true);
+      setErro("");
+
+      try {
+        const { dataEspecifica, dataInicial, dataFinal, forma } = filtros;
+        const resp = await buscarPagamentosDetalhados({
+          padariaId,
+          dataEspecifica,
+          dataInicial,
+          dataFinal,
+          forma,
+        });
+        if (!vivo.current) return;
+
+        const arr = Array.isArray(resp?.pagamentos) ? resp.pagamentos : [];
+        setLista(arr);
+      } catch (e) {
+        console.error("Erro ao filtrar pagamentos:", e);
+        if (!vivo.current) return;
+        setErro("Erro ao buscar pagamentos.");
+        setLista([]);
+      } finally {
+        if (vivo.current) setCarregando(false);
+      }
+    }
+
+    carregarLista();
+    return () => {
+      vivo.current = false;
+    };
+  }, [padariaId, filtros, aplicouFiltro]);
+
+  // totais da lista (apenas quando tiver filtro aplicado)
+  const totalLista = useMemo(() => {
+    const total = (lista || []).reduce(
+      (s, p) => s + (Number(p?.valor) || 0),
+      0
+    );
+    return total;
+  }, [lista]);
 
   return (
-    <div className="p-4 bg-white rounded shadow">
-      <h2 className="text-xl font-semibold mb-4">Pagamentos Filtrados</h2>
+    <div className="bg-white p-4 rounded shadow mb-4">
+      <h3 className="font-bold mb-3">Pagamentos Filtrados</h3>
 
-      {carregando ? (
-        <p className="text-gray-600">Carregando…</p>
-      ) : erro ? (
-        <p className="text-red-500">{erro}</p>
-      ) : !pagamentos || pagamentos.length === 0 ? (
-        <p className="text-gray-600">
-          Nenhum pagamento encontrado com esses filtros.
-        </p>
-      ) : (
+      {/* Cards do RESUMO (mês corrente e pendências do anterior) */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+        <div className="rounded border p-3 bg-gray-50">
+          <div className="text-sm text-gray-600">
+            Total Recebido (mês {mesAtual})
+          </div>
+          <div className="text-xl font-semibold">
+            {fmtEUR.format(resumoMes.totalRecebidoMes || 0)}
+          </div>
+        </div>
+
+        <div className="rounded border p-3 bg-gray-50">
+          <div className="text-sm text-gray-600">
+            Total Pendente (mês anterior)
+          </div>
+          <div className="text-xl font-semibold text-red-600">
+            {fmtEUR.format(resumoMes.pendenciaAnterior || 0)}
+          </div>
+        </div>
+
+        <div className="rounded border p-3 bg-gray-50">
+          <div className="text-sm text-gray-600">Clientes Inadimplentes</div>
+          <div className="text-xl font-semibold text-blue-600">
+            {resumoMes.inadimplentes || 0}
+          </div>
+        </div>
+      </div>
+
+      {/* Filtros */}
+      <p className="text-sm text-gray-600 mb-2">
+        Defina pelo menos um filtro (data específica, ou intervalo de datas, ou
+        forma) para ver os resultados da <strong>listagem</strong>.
+      </p>
+
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-3 mb-2">
+        <div>
+          <label className="block text-sm">Data específica</label>
+          <input
+            type="date"
+            name="dataEspecifica"
+            value={filtros.dataEspecifica}
+            onChange={onChangeFiltro}
+            className="border p-1 rounded w-full"
+          />
+        </div>
+        <div>
+          <label className="block text-sm">Data inicial</label>
+          <input
+            type="date"
+            name="dataInicial"
+            value={filtros.dataInicial}
+            onChange={onChangeFiltro}
+            className="border p-1 rounded w-full"
+          />
+        </div>
+        <div>
+          <label className="block text-sm">Data final</label>
+          <input
+            type="date"
+            name="dataFinal"
+            value={filtros.dataFinal}
+            onChange={onChangeFiltro}
+            className="border p-1 rounded w-full"
+          />
+        </div>
+        <div>
+          <label className="block text-sm">Forma de pagamento</label>
+          <select
+            name="forma"
+            value={filtros.forma}
+            onChange={onChangeFiltro}
+            className="border p-1 rounded w-full"
+          >
+            <option value="">Todas</option>
+            <option value="dinheiro">Dinheiro</option>
+            <option value="cartao">Cartão</option>
+            <option value="mbway">MB Way</option>
+          </select>
+        </div>
+
+        {/* resumo do total da LISTA (só quando há filtro) */}
+        <div className="flex items-end">
+          <div className="text-sm text-gray-600">
+            {aplicouFiltro ? (
+              <span>
+                <strong>Total da listagem:</strong> {fmtEUR.format(totalLista)}
+              </span>
+            ) : (
+              <span>Nenhum filtro aplicado.</span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Tabela só aparece se tiver filtro */}
+      {aplicouFiltro && (
         <>
-          <div className="overflow-x-auto">
-            <table className="w-full table-auto border-collapse">
-              <thead>
-                <tr className="bg-gray-100">
-                  <th className="border p-2 text-left">Cliente</th>
-                  <th className="border p-2 text-left">Entregador</th>
-                  <th className="border p-2 text-right">Valor</th>
-                  <th className="border p-2 text-left">Forma</th>
-                  <th className="border p-2 text-left">Data</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pagamentos.map((p) => (
-                  <tr key={p.id} className="hover:bg-gray-50">
-                    <td className="border p-2">{p.cliente}</td>
-                    <td className="border p-2">{p.entregador}</td>
-                    <td className="border p-2 text-right">
-                      {formatEUR(p.valor)}
-                    </td>
-                    <td className="border p-2 capitalize">{p.forma || "—"}</td>
-                    <td className="border p-2">
-                      {p.data
-                        ? new Date(p.data).toLocaleDateString("pt-PT")
-                        : "—"}
-                    </td>
+          {carregando ? (
+            <p className="text-gray-500">Carregando…</p>
+          ) : erro ? (
+            <p className="text-red-600">{erro}</p>
+          ) : (lista || []).length === 0 ? (
+            <p className="text-gray-500">Nenhum pagamento encontrado.</p>
+          ) : (
+            <div className="overflow-auto">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="text-left bg-gray-100">
+                    <th className="p-2">Cliente</th>
+                    <th className="p-2">Entregador</th>
+                    <th className="p-2">Valor</th>
+                    <th className="p-2">Forma</th>
+                    <th className="p-2">Data</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="mt-4 flex flex-wrap gap-6">
-            <p className="font-medium">
-              Total Recebido: {formatEUR(totalRecebido)}
-            </p>
-            <p className="font-medium">Clientes Pagantes: {clientesPagantes}</p>
-          </div>
+                </thead>
+                <tbody>
+                  {lista.map((p, i) => (
+                    <tr key={i} className="border-b">
+                      <td className="p-2">
+                        {p.clienteNome || p.cliente || "-"}
+                      </td>
+                      <td className="p-2">
+                        {p.entregadorNome || p.entregador || "-"}
+                      </td>
+                      <td className="p-2">
+                        {fmtEUR.format(Number(p.valor) || 0)}
+                      </td>
+                      <td className="p-2">{p.forma || "-"}</td>
+                      <td className="p-2">
+                        {p.data
+                          ? new Date(p.data).toLocaleDateString("pt-PT")
+                          : "-"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </>
       )}
     </div>

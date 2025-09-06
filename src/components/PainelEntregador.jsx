@@ -260,6 +260,50 @@ export default function PainelEntregador() {
     setMostrarModalRota(true);
     listarRotas();
   };
+
+  // --- geolocalização em tempo real durante a rota ---
+  useEffect(() => {
+    if (mostrarModalRota) return; // ainda não escolheu rota
+    if (!("geolocation" in navigator)) {
+      console.warn("Geolocalização indisponível neste dispositivo.");
+      return;
+    }
+
+    let watchId = null;
+    let lastSent = 0;
+
+    const enviar = async (lat, lng) => {
+      try {
+        // usa o cliente http central: envia token automaticamente
+        await httpPost("/usuarios/atualizar-localizacao", { lat, lng });
+      } catch (e) {
+        console.warn("Falha ao enviar localização:", e?.message || e);
+      }
+    };
+
+    watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        const { latitude, longitude } = pos.coords || {};
+        const agora = Date.now();
+        // evita flood (máx ~1 envio/5s)
+        if (
+          Number.isFinite(latitude) &&
+          Number.isFinite(longitude) &&
+          agora - lastSent > 5000
+        ) {
+          lastSent = agora;
+          enviar(latitude, longitude);
+        }
+      },
+      (err) => console.warn("Geoloc error:", err),
+      { enableHighAccuracy: true, maximumAge: 4000, timeout: 10000 }
+    );
+
+    return () => {
+      if (watchId != null) navigator.geolocation.clearWatch(watchId);
+    };
+  }, [mostrarModalRota]);
+
   /* -------- header -------- */
   const Header = (
     <div className="flex items-center justify-between mb-4" style={{ gap: 8 }}>

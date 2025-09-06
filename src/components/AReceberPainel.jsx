@@ -56,8 +56,8 @@ export default function AReceberPainel({ padariaId }) {
 
   async function abrirModalAvulsas() {
     try {
-      const lista = await listarAvulsasDoMes(padariaId, mes);
-      setAvulsas(lista);
+      const resp = await listarAvulsasDoMes(padariaId, mes);
+      setAvulsas(resp.itens); // agora vem em resp.itens
       setAbrirAvulsas(true);
     } catch (e) {
       console.error(e);

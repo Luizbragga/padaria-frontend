@@ -1,4 +1,3 @@
-// src/components/FaturamentoMensal.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { buscarFaturamentoMensal } from "../services/analiticoService";
 import { getUsuario } from "../utils/auth";
@@ -66,19 +65,17 @@ export default function FaturamentoMensal({ padariaId }) {
     [dados]
   );
 
-  // ----- Escala Y: topo = máximo real; majors = 50 em 50 (+ topo); minors = 10 em 10 -----
+  // ----- Escala Y com linhas maiores (50 em 50 + topo) e menores (10 em 10) -----
   const { max, majorTicks, minorTicks } = useMemo(() => {
     const valores = (Array.isArray(dados) ? dados : []).map(
       (d) => Number(d?.valorTotal) || 0
     );
     const m = Math.max(0, ...valores);
 
-    // majors: 0, 50, 100, ... e inclui o topo m (mesmo se não for múltiplo de 50)
     const majors = [0];
     for (let v = 50; v < m; v += 50) majors.push(v);
     if (majors.at(-1) !== m) majors.push(m);
 
-    // minors: 10,20,30,40,60,70,80,90, ... até m (exclui múltiplos de 50)
     const minors = [];
     for (let v = 10; v < m; v += 10) {
       if (v % 50 !== 0) minors.push(v);
@@ -122,19 +119,18 @@ export default function FaturamentoMensal({ padariaId }) {
                 margin={{ top: 8, right: 12, left: 0, bottom: 8 }}
               >
                 <CartesianGrid strokeDasharray="3 3" />
-
                 <XAxis dataKey="mes" />
 
-                {/* Eixo Y sem rótulos próprios (vamos rotular via ReferenceLine) */}
+                {/* Y sem ticks (vamos desenhar rótulos nas ReferenceLine) */}
                 <YAxis
                   type="number"
                   domain={[0, max]}
                   tick={false}
                   axisLine={{ stroke: "#D1D5DB" }}
-                  width={72} // dá espaço aos rótulos “manuais”
+                  width={72}
                 />
 
-                {/* Linhas menores (10 em 10) — sem rótulo */}
+                {/* Linhas menores (10 em 10) */}
                 {minorTicks.map((y) => (
                   <ReferenceLine
                     key={`minor-${y}`}
@@ -145,7 +141,7 @@ export default function FaturamentoMensal({ padariaId }) {
                   />
                 ))}
 
-                {/* Linhas maiores (0, 50, 100, ... e topo) — com rótulo formatado */}
+                {/* Linhas maiores (50 em 50 + topo) com rótulo */}
                 {majorTicks.map((y) => (
                   <ReferenceLine
                     key={`major-${y}`}
@@ -161,7 +157,7 @@ export default function FaturamentoMensal({ padariaId }) {
                           dy={3}
                           textAnchor="end"
                           fontSize={12}
-                          fontWeight={y === max ? 700 : 700} // pode pôr 900 no topo se quiser
+                          fontWeight={700}
                           fill="#111827"
                         >
                           {fmtEUR.format(y)}
