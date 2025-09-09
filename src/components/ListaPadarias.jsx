@@ -1,6 +1,6 @@
 // src/components/ListaPadarias.jsx
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import {
   listarPadarias,
   alterarStatusPadaria,
@@ -14,6 +14,8 @@ export default function ListaPadarias() {
   const [busyId, setBusyId] = useState(null); // id da padaria sendo alterada/deletada
   const navigate = useNavigate();
   const alive = useRef(true);
+  const offRouteSinceRef = useRef(null);
+  const lastRecalcAtRef = useRef(0);
 
   async function buscarPadarias() {
     try {
@@ -72,14 +74,23 @@ export default function ListaPadarias() {
     <div className="mt-6">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-xl font-bold">Padarias Cadastradas</h2>
-        <button
-          className="text-sm px-3 py-1 rounded border"
-          onClick={buscarPadarias}
-          disabled={carregando}
-          title="Atualizar lista"
-        >
-          {carregando ? "Atualizando…" : "Atualizar"}
-        </button>
+        <div className="flex items-center gap-2">
+          <Link
+            to="/admin/cadastros"
+            className="text-sm px-3 py-1 rounded bg-indigo-600 text-white hover:bg-indigo-700"
+            title="Ir para a tela de cadastros"
+          >
+            Cadastros
+          </Link>
+          <button
+            className="text-sm px-3 py-1 rounded border"
+            onClick={buscarPadarias}
+            disabled={carregando}
+            title="Atualizar lista"
+          >
+            {carregando ? "Atualizando…" : "Atualizar"}
+          </button>
+        </div>
       </div>
 
       {erro && <p className="text-red-600 mb-3">{erro}</p>}
