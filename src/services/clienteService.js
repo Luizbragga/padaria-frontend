@@ -57,3 +57,7 @@ export async function listarClientes(params = {}) {
   const { data } = await http.get(`/api/clientes`, { params });
   return Array.isArray(data) ? data : data?.clientes ?? data;
 }
+export async function excluirCliente(id) {
+  const { data } = await http.delete(`/clientes/${id}`);
+  return data;
+}
