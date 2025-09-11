@@ -457,8 +457,14 @@ export default function PainelEntregador() {
         <div>
           <h2 className="text-2xl font-bold">Painel do Entregador</h2>
           <p className="text-sm text-gray-500">
-            Hoje: {new Date().toLocaleDateString("pt-PT")} • Entregador:{" "}
-            <strong>{usuario?.nome || "—"}</strong>
+            Entregador •{" "}
+            <span className="font-medium">{usuario?.nome || "—"}</span> •{" "}
+            {new Date().toLocaleDateString("pt-PT", {
+              weekday: "long",
+              day: "2-digit",
+              month: "2-digit",
+              year: "numeric",
+            })}
           </p>
         </div>
         <div className="flex gap-2">

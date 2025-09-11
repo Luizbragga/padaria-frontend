@@ -1,5 +1,5 @@
 // src/App.jsx
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import ProtectedRoute from "./components/ProtectedRoute";
 import AdminCadastros from "./pages/AdminCadastros";
 import Login from "./pages/Login";
@@ -10,22 +10,19 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Login */}
         <Route path="/" element={<Login />} />
 
-        {/* Painel (admin, gerente e entregador) */}
         <Route
-          path="/painel"
+          path="/painel/*"
           element={
             <ProtectedRoute
-              rolesPermitidos={["admin", "gerente", "entregador"]}
+              rolesPermitidos={["admin", "gerente", "entregador", "atendente"]}
             >
               <Painel />
             </ProtectedRoute>
           }
         />
 
-        {/* Entregador: Minhas Entregas */}
         <Route
           path="/entregador/entregas"
           element={
@@ -35,7 +32,6 @@ export default function App() {
           }
         />
 
-        {/* Admin: Cadastros (usuários e clientes) */}
         <Route
           path="/admin/cadastros"
           element={
@@ -46,7 +42,7 @@ export default function App() {
         />
 
         {/* fallback opcional */}
-        {/* <Route path="*" element={<Navigate to="/" replace />} /> */}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   );

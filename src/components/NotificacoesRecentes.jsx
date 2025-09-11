@@ -1,4 +1,3 @@
-// src/components/NotificacoesRecentes.jsx
 import React, { useEffect, useRef, useState } from "react";
 import axios from "axios";
 import { getToken, getUsuario } from "../utils/auth";
@@ -12,30 +11,27 @@ function normalizaEventos(input) {
     : Array.isArray(input?.eventos)
     ? input.eventos
     : [];
-  return (
-    arr
-      .map((ev, i) => {
-        const id = ev?._id || ev?.id || `${ev?.tipo || "evt"}_${i}`;
-        const tipo = ev?.tipo || ev?.eventType || "Evento";
-        const cliente =
-          typeof ev?.cliente === "string"
-            ? ev.cliente
-            : ev?.cliente?.nome || ev?.clienteNome || "Cliente";
-        const entregador =
-          typeof ev?.entregador === "string"
-            ? ev.entregador
-            : ev?.entregador?.nome || ev?.entregadorNome || null;
-        const rota = ev?.rota || ev?.rotaCodigo || null;
-        const horario = ev?.horario || ev?.createdAt || ev?.updatedAt || null;
-        return { id, tipo, cliente, entregador, rota, horario };
-      })
-      // Mais recentes primeiro
-      .sort((a, b) => {
-        const ta = a.horario ? new Date(a.horario).getTime() : 0;
-        const tb = b.horario ? new Date(b.horario).getTime() : 0;
-        return tb - ta;
-      })
-  );
+  return arr
+    .map((ev, i) => {
+      const id = ev?._id || ev?.id || `${ev?.tipo || "evt"}_${i}`;
+      const tipo = ev?.tipo || ev?.eventType || "Evento";
+      const cliente =
+        typeof ev?.cliente === "string"
+          ? ev.cliente
+          : ev?.cliente?.nome || ev?.clienteNome || "Cliente";
+      const entregador =
+        typeof ev?.entregador === "string"
+          ? ev.entregador
+          : ev?.entregador?.nome || ev?.entregadorNome || null;
+      const rota = ev?.rota || ev?.rotaCodigo || null;
+      const horario = ev?.horario || ev?.createdAt || ev?.updatedAt || null;
+      return { id, tipo, cliente, entregador, rota, horario };
+    })
+    .sort((a, b) => {
+      const ta = a.horario ? new Date(a.horario).getTime() : 0;
+      const tb = b.horario ? new Date(b.horario).getTime() : 0;
+      return tb - ta;
+    });
 }
 
 // Badge por tipo de evento
@@ -55,7 +51,7 @@ export default function NotificacoesRecentes({ padariaId }) {
   const [carregando, setCarregando] = useState(true);
 
   const timerRef = useRef(null);
-  const aliveRef = useRef(true);
+  const aliveRef = useRef(false);
 
   const usuario = getUsuario();
   const ehEntregador = usuario?.role === "entregador";
@@ -74,19 +70,18 @@ export default function NotificacoesRecentes({ padariaId }) {
       if (!aliveRef.current) return;
       setEventos(normalizaEventos(data));
     } catch (e) {
-      if (!alive.current) return;
-
+      if (!aliveRef.current) return;
       const code = e?.response?.status ?? null;
       if (code === 404 || code === 204) {
-        setNotificacoes([]);
-        setErro(""); // não mostra aviso vermelho
+        setEventos([]);
+        setErro("");
       } else {
         console.error("Erro ao carregar notificações:", e);
         setErro("Erro ao carregar notificações recentes.");
-        setNotificacoes([]);
+        setEventos([]);
       }
     } finally {
-      if (alive.current) setCarregando(false);
+      if (aliveRef.current) setCarregando(false);
     }
   }
 
@@ -182,7 +177,10 @@ export default function NotificacoesRecentes({ padariaId }) {
               </span>
               {ev.horario && (
                 <span className="ml-auto text-gray-500">
-                  {new Date(ev.horario).toLocaleTimeString()}
+                  {new Date(ev.horario).toLocaleTimeString("pt-PT", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
                 </span>
               )}
             </li>

@@ -1,3 +1,4 @@
+// src/pages/Painel.jsx
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
@@ -15,6 +16,9 @@ import PainelEntregador from "../components/PainelEntregador";
 import PagamentosFiltrados from "../components/PagamentosFiltrados";
 import AReceberPainel from "../components/AReceberPainel";
 
+// 👇 página simples de caixa para o atendente
+import CaixaAtendente from "./CaixaAtendente";
+
 import { getUsuario } from "../utils/auth";
 
 export default function Painel() {
@@ -26,7 +30,18 @@ export default function Painel() {
   const [padariaId, setPadariaId] = useState(null);
   const [role, setRole] = useState(null);
   const [tokenProcessado, setTokenProcessado] = useState(false);
+  const usuario = getUsuario();
 
+  const cargo = role
+    ? role.charAt(0).toUpperCase() + role.slice(1) // "gerente" -> "Gerente"
+    : "—";
+
+  const dataFormatada = new Date().toLocaleDateString("pt-PT", {
+    weekday: "long",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
   // 1) Processa usuário e decide padaria
   useEffect(() => {
     const usuario = getUsuario();
@@ -45,7 +60,7 @@ export default function Painel() {
         setPadariaId(null);
       }
     } else {
-      // gerente / operador / entregador: sempre a padaria do usuário
+      // gerente / atendente / entregador: sempre a padaria do usuário
       setPadariaId(usuario.padaria || null);
     }
 
@@ -72,14 +87,28 @@ export default function Painel() {
     return <PainelEntregador />;
   }
 
-  // 6) Painel do gerente/admin/operador
+  // 5.1) Atendente usa a tela de Caixa (registrar pagamento)
+  if (role === "atendente") {
+    return <CaixaAtendente padariaId={padariaId} />;
+  }
+
+  // 6) Painel do gerente/admin
   return (
     <div className="min-h-screen bg-gray-100 text-gray-800">
-      <header className="bg-white shadow p-4 sticky top-0 z-10">
+      <header className="bg-white shadow p-4 sticky top-0 z-[1200]">
         <h1 className="text-2xl font-bold">Painel da Padaria</h1>
+
         <p className="text-sm text-gray-500">
-          Acesso: {role} | ID da padaria: {padariaId}
+          {cargo} • <span className="font-medium">{usuario?.nome || "—"}</span>{" "}
+          • {dataFormatada}
         </p>
+
+        {/* opcional: manter o ID da padaria bem discreto */}
+        {padariaId && (
+          <p className="text-xs text-gray-400 mt-1">
+            ID da padaria: {padariaId}
+          </p>
+        )}
       </header>
 
       <main className="p-6 max-w-4xl mx-auto">

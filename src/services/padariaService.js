@@ -84,3 +84,15 @@ export async function deletarRota(id) {
   const { data } = await http.delete(`/admin/rotas/${id}`);
   return data;
 }
+
+export async function listarRotasNomes(padariaId) {
+  const params = {};
+  if (padariaId) params.padaria = padariaId;
+  try {
+    const { data } = await http.get("/rotas/nomes", { params });
+    return Array.isArray(data) ? data : [];
+  } catch (e) {
+    console.error("listarRotasNomes:", e?.response?.status || e);
+    return [];
+  }
+}

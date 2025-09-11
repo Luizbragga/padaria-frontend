@@ -8,7 +8,7 @@ import { getToken, getUsuario } from "../utils/auth";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "";
 
-// Corrige os ícones padrão do Leaflet (sem quebrar se já foi feito)
+// Corrige os ícones padrão do Leaflet (idempotente)
 try {
   // @ts-ignore
   delete L.Icon.Default.prototype._getIconUrl;
@@ -62,7 +62,7 @@ export default function MapaEntregadores({ padariaId }) {
   const [erro, setErro] = useState("");
   const [carregando, setCarregando] = useState(true);
 
-  const aliveRef = useRef(true);
+  const aliveRef = useRef(false);
   const timerRef = useRef(null);
 
   async function carregar() {
@@ -79,7 +79,7 @@ export default function MapaEntregadores({ padariaId }) {
       if (!aliveRef.current) return;
       setEntregadores(normalizaLista(data));
     } catch (e) {
-      if (!alive.current) return;
+      if (!aliveRef.current) return;
 
       const code = e?.response?.status ?? null;
       if (code === 404 || code === 204) {
@@ -91,7 +91,7 @@ export default function MapaEntregadores({ padariaId }) {
         setEntregadores([]);
       }
     } finally {
-      if (alive.current) setCarregando(false);
+      if (aliveRef.current) setCarregando(false);
     }
   }
 

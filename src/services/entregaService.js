@@ -85,8 +85,22 @@ export async function registrarPagamentoCliente(
     mes, // opcional, ajuda a conciliar no mês
   };
   const { data: resp } = await http.post(
-    `/clientes/${clienteId}/registrar-pagamento`,
+    `/pagamentos/cliente/${clienteId}`,
     payload
   );
   return resp;
+}
+
+export async function listarEntregasDoDia() {
+  try {
+    const { data } = await http.get("/entregas/hoje");
+    // garante shape mesmo se backend mudar
+    return {
+      entregasConcluidas: data?.entregasConcluidas ?? [],
+      entregasPendentes: data?.entregasPendentes ?? [],
+    };
+  } catch (e) {
+    console.error("listarEntregasDoDia:", e);
+    return { entregasConcluidas: [], entregasPendentes: [] };
+  }
 }

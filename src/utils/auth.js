@@ -28,7 +28,7 @@ export const getRole = () => {
   if (raw) {
     try {
       const u = JSON.parse(raw);
-      return u?.role || null;
+      return u?.role ? String(u.role).toLowerCase() : null;
     } catch {
       return null;
     }

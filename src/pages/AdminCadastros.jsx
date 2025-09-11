@@ -663,6 +663,7 @@ export default function AdminCadastros() {
           >
             <option value="entregador">Entregador</option>
             <option value="gerente">Gerente</option>
+            <option value="atendente">Atendente</option>
             <option value="admin">Admin</option>
           </select>
           {uRole !== "admin" ? (
@@ -1196,6 +1197,7 @@ export default function AdminCadastros() {
               >
                 <option value="entregador">Entregador</option>
                 <option value="gerente">Gerente</option>
+                <option value="atendente">Atendente</option>
                 <option value="admin">Admin</option>
               </select>
               <label className="text-sm flex items-center gap-2">
