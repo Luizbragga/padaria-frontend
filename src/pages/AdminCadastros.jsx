@@ -1096,62 +1096,105 @@ export default function AdminCadastros() {
         {cErro && <div className="text-red-600 text-sm mt-2">{cErro}</div>}
 
         {/* Lista de clientes recolhível */}
-        {mostrarClientes && (
-          <div className="mt-6 overflow-auto rounded border">
-            <table className="min-w-full text-sm">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="text-left p-2">Nome</th>
-                  <th className="text-left p-2">Rota</th>
-                  <th className="text-left p-2">Endereço</th>
-                  <th className="text-left p-2">Telefone</th>
-                  <th className="text-left p-2 w-40">Ações</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loadingClientes ? (
-                  <tr>
-                    <td className="p-2" colSpan={5}>
-                      Carregando…
-                    </td>
-                  </tr>
-                ) : clientes.length === 0 ? (
-                  <tr>
-                    <td className="p-2" colSpan={5}>
-                      Sem clientes.
-                    </td>
-                  </tr>
-                ) : (
-                  clientes.map((c) => (
-                    <tr key={c._id} className="border-t">
-                      <td className="p-2">{c.nome}</td>
-                      <td className="p-2">{c.rota || "—"}</td>
-                      <td className="p-2">{c.endereco}</td>
-                      <td className="p-2">{c.telefone || "—"}</td>
-                      <td className="p-2 flex gap-2">
-                        <button
-                          className="px-2 py-1 border rounded"
-                          onClick={() => {
-                            setCEdit({ ...c });
-                            prepararMatrizEditFromCliente(c);
-                          }}
-                        >
-                          Editar
-                        </button>
-                        <button
-                          className="px-2 py-1 bg-red-600 text-white rounded"
-                          onClick={() => onExcluirCliente(c._id)}
-                        >
-                          Excluir
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        )}
+        {mostrarClientes &&
+          createPortal(
+            <div
+              role="dialog"
+              aria-modal="true"
+              className="fixed inset-0 z-[9999] flex items-start md:items-center justify-center"
+              tabIndex={-1}
+              onKeyDown={(e) => e.key === "Escape" && setMostrarClientes(false)}
+            >
+              {/* Backdrop */}
+              <div
+                className="absolute inset-0 bg-black/30"
+                onClick={() => setMostrarClientes(false)}
+              />
+
+              {/* Caixa do modal */}
+              <div className="relative w-[min(96vw,1100px)] bg-white rounded-lg shadow-2xl ring-1 ring-black/5">
+                {/* Cabeçalho */}
+                <div className="flex items-center justify-between p-3 border-b">
+                  <h3 className="text-base font-semibold">Lista de clientes</h3>
+                  <button
+                    className="px-2 py-1 text-sm rounded border"
+                    onClick={() => setMostrarClientes(false)}
+                  >
+                    Fechar
+                  </button>
+                </div>
+
+                {/* Conteúdo com rolagem interna */}
+                <div className="max-h-[75vh] overflow-auto">
+                  <table className="min-w-full text-sm">
+                    <thead className="bg-gray-50 sticky top-0 z-10">
+                      <tr>
+                        <th className="text-left p-2">Nome</th>
+                        <th className="text-left p-2">Rota</th>
+                        <th className="text-left p-2">Endereço</th>
+                        <th className="text-left p-2">Telefone</th>
+                        <th className="text-left p-2 w-40">Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {loadingClientes ? (
+                        <tr>
+                          <td className="p-2" colSpan={5}>
+                            Carregando…
+                          </td>
+                        </tr>
+                      ) : clientes.length === 0 ? (
+                        <tr>
+                          <td className="p-2" colSpan={5}>
+                            Sem clientes.
+                          </td>
+                        </tr>
+                      ) : (
+                        clientes.map((c) => (
+                          <tr key={c._id} className="border-t">
+                            <td className="p-2">{c.nome}</td>
+                            <td className="p-2">{c.rota || "—"}</td>
+                            <td className="p-2">{c.endereco}</td>
+                            <td className="p-2">{c.telefone || "—"}</td>
+                            <td className="p-2">
+                              <div className="flex gap-2">
+                                <button
+                                  className="px-2 py-1 border rounded"
+                                  onClick={() => {
+                                    setCEdit({ ...c });
+                                    prepararMatrizEditFromCliente(c);
+                                  }}
+                                >
+                                  Editar
+                                </button>
+                                <button
+                                  className="px-2 py-1 bg-red-600 text-white rounded"
+                                  onClick={() => onExcluirCliente(c._id)}
+                                >
+                                  Excluir
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Rodapé */}
+                <div className="p-3 border-t text-right">
+                  <button
+                    className="px-3 py-1 rounded border"
+                    onClick={() => setMostrarClientes(false)}
+                  >
+                    Fechar
+                  </button>
+                </div>
+              </div>
+            </div>,
+            document.body
+          )}
 
         <div className="mt-3">
           <button

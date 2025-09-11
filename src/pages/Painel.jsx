@@ -1,5 +1,5 @@
 // src/pages/Painel.jsx
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
 import ListaPadarias from "../components/ListaPadarias";
@@ -15,8 +15,6 @@ import NotificacoesRecentes from "../components/NotificacoesRecentes";
 import PainelEntregador from "../components/PainelEntregador";
 import PagamentosFiltrados from "../components/PagamentosFiltrados";
 import AReceberPainel from "../components/AReceberPainel";
-
-// 👇 página simples de caixa para o atendente
 import CaixaAtendente from "./CaixaAtendente";
 
 import { getUsuario } from "../utils/auth";
@@ -32,9 +30,7 @@ export default function Painel() {
   const [tokenProcessado, setTokenProcessado] = useState(false);
   const usuario = getUsuario();
 
-  const cargo = role
-    ? role.charAt(0).toUpperCase() + role.slice(1) // "gerente" -> "Gerente"
-    : "—";
+  const cargo = role ? role.charAt(0).toUpperCase() + role.slice(1) : "—";
 
   const dataFormatada = new Date().toLocaleDateString("pt-PT", {
     weekday: "long",
@@ -42,35 +38,48 @@ export default function Painel() {
     month: "2-digit",
     year: "numeric",
   });
+
+  // mede a altura do header e expõe como --header-h
+  const headerRef = useRef(null);
+  useEffect(() => {
+    const applyHeaderVar = () => {
+      const h = headerRef.current?.offsetHeight ?? 72; // fallback
+      document.documentElement.style.setProperty("--header-h", `${h}px`);
+    };
+    applyHeaderVar();
+
+    const ro = new ResizeObserver(applyHeaderVar);
+    if (headerRef.current) ro.observe(headerRef.current);
+    window.addEventListener("resize", applyHeaderVar);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", applyHeaderVar);
+    };
+  }, []);
+
   // 1) Processa usuário e decide padaria
   useEffect(() => {
-    const usuario = getUsuario();
-    if (!usuario) {
+    const u = getUsuario();
+    if (!u) {
       navigate("/", { replace: true });
       return;
     }
 
-    setRole(usuario.role);
+    setRole(u.role);
 
-    if (usuario.role === "admin") {
-      // admin pode alternar padaria via query string
-      if (padariaQueryId) {
-        setPadariaId(padariaQueryId);
-      } else {
-        setPadariaId(null);
-      }
+    if (u.role === "admin") {
+      if (padariaQueryId) setPadariaId(padariaQueryId);
+      else setPadariaId(null);
     } else {
-      // gerente / atendente / entregador: sempre a padaria do usuário
-      setPadariaId(usuario.padaria || null);
+      setPadariaId(u.padaria || null);
     }
 
     setTokenProcessado(true);
   }, [padariaQueryId, navigate]);
 
-  // 2) Enquanto processa token, não renderiza
   if (!tokenProcessado) return null;
 
-  // 3) Admin sem padaria selecionada: mostra lista
+  // Admin sem padaria escolhida
   if (role === "admin" && !padariaId) {
     const handleSelecionarPadaria = (id) => {
       setPadariaId(id);
@@ -79,31 +88,26 @@ export default function Painel() {
     return <ListaPadarias onSelect={handleSelecionarPadaria} />;
   }
 
-  // 4) Se ainda não temos padariaId, não renderiza
   if (!padariaId) return null;
 
-  // 5) Entregador usa painel dedicado
-  if (role === "entregador") {
-    return <PainelEntregador />;
-  }
+  // Entregador
+  if (role === "entregador") return <PainelEntregador />;
 
-  // 5.1) Atendente usa a tela de Caixa (registrar pagamento)
-  if (role === "atendente") {
-    return <CaixaAtendente padariaId={padariaId} />;
-  }
+  // Atendente
+  if (role === "atendente") return <CaixaAtendente padariaId={padariaId} />;
 
-  // 6) Painel do gerente/admin
+  // Gerente/Admin
   return (
     <div className="min-h-screen bg-gray-100 text-gray-800">
-      <header className="bg-white shadow p-4 sticky top-0 z-[1200]">
+      <header
+        ref={headerRef}
+        className="bg-white shadow p-4 sticky top-0 z-[1200]"
+      >
         <h1 className="text-2xl font-bold">Painel da Padaria</h1>
-
         <p className="text-sm text-gray-500">
           {cargo} • <span className="font-medium">{usuario?.nome || "—"}</span>{" "}
           • {dataFormatada}
         </p>
-
-        {/* opcional: manter o ID da padaria bem discreto */}
         {padariaId && (
           <p className="text-xs text-gray-400 mt-1">
             ID da padaria: {padariaId}
@@ -112,16 +116,9 @@ export default function Painel() {
       </header>
 
       <main className="p-6 max-w-4xl mx-auto">
-        {/* A Receber (mês + avulsas + drill-down) */}
         <AReceberPainel padariaId={padariaId} />
-
-        {/* Faturamento Mensal (apenas gráfico + botão) */}
         <FaturamentoMensal padariaId={padariaId} />
-
-        {/* Pagamentos: bloco único com filtros + cards + listagem */}
         <PagamentosFiltrados padariaId={padariaId} />
-
-        {/* Demais widgets (opcionais) */}
         <ResumoFinanceiro padariaId={padariaId} />
         <ResumoEntregas padariaId={padariaId} />
         <RankingEntregadores padariaId={padariaId} />

@@ -1,5 +1,6 @@
 // src/components/ClientesListaModal.jsx
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 
 const fmtEUR = new Intl.NumberFormat("pt-PT", {
   style: "currency",
@@ -15,7 +16,17 @@ export default function ClientesListaModal({
   const [busca, setBusca] = useState("");
   const [rota, setRota] = useState("todas");
 
-  // rotas únicas (a partir dos dados)
+  // trava o scroll do body enquanto o modal está aberto
+  useEffect(() => {
+    if (!aberto) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [aberto]);
+
+  // rotas únicas (derivadas da lista)
   const rotas = useMemo(() => {
     const set = new Set();
     clientes.forEach((c) => {
@@ -25,7 +36,7 @@ export default function ClientesListaModal({
     return ["todas", ...Array.from(set).sort()];
   }, [clientes]);
 
-  // aplica filtro e ordena por nome A–Z
+  // aplica filtro + ordenação
   const lista = useMemo(() => {
     const termo = busca.trim().toLowerCase();
     const rotaAtiva = rota.toLowerCase();
@@ -41,7 +52,6 @@ export default function ClientesListaModal({
         String(c.rota || "")
           .trim()
           .toLowerCase() === rotaAtiva;
-
       return okNome && okRota;
     });
 
@@ -56,9 +66,13 @@ export default function ClientesListaModal({
 
   if (!aberto) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 bg-black/40 flex items-start justify-center p-4">
-      <div className="bg-white w-full max-w-3xl rounded shadow-lg overflow-hidden">
+  const modal = (
+    <div className="fixed inset-0 z-[3000] flex items-start justify-center">
+      {/* Backdrop: clicar fora fecha */}
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+
+      {/* Conteúdo */}
+      <div className="relative mt-10 w-full max-w-5xl bg-white rounded shadow-lg overflow-hidden">
         <div className="p-4 border-b flex items-center justify-between gap-3">
           <h3 className="font-bold text-lg">Clientes</h3>
           <button
@@ -79,6 +93,7 @@ export default function ClientesListaModal({
               onChange={(e) => setBusca(e.target.value)}
               placeholder="Digite o nome do cliente…"
               className="border rounded px-3 py-2 w-full"
+              autoFocus
             />
           </div>
           <div>
@@ -109,11 +124,14 @@ export default function ClientesListaModal({
               </tr>
             </thead>
             <tbody>
-              {lista.map((c) => (
+              {lista.map((c, i) => (
                 <tr
-                  key={c.cliente}
+                  key={`${c.cliente || c._id || c.nome}-${i}`}
                   className="border-b hover:bg-gray-50 cursor-pointer"
-                  onClick={() => onSelectCliente?.(c)}
+                  onClick={() => {
+                    onSelectCliente?.(c); // seleciona
+                    onClose?.(); // fecha a lista
+                  }}
                   title="Ver detalhes do cliente"
                 >
                   <td className="p-2">{c.nome || c.cliente}</td>
@@ -143,4 +161,7 @@ export default function ClientesListaModal({
       </div>
     </div>
   );
+
+  // Renderiza acima de qualquer header sticky
+  return createPortal(modal, document.body);
 }

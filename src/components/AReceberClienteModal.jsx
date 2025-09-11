@@ -219,8 +219,9 @@ export default function AReceberClienteModal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-auto">
+    <div className="fixed inset-0 z-[3001] flex items-start justify-center">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="relative mt-6 w-full max-w-5xl bg-white rounded-xl shadow-xl overflow-auto max-h-[90vh]">
         {/* Cabeçalho */}
         <div className="flex items-center justify-between p-4 border-b">
           <div>
