@@ -16,8 +16,10 @@ import PainelEntregador from "../components/PainelEntregador";
 import PagamentosFiltrados from "../components/PagamentosFiltrados";
 import AReceberPainel from "../components/AReceberPainel";
 import CaixaAtendente from "./CaixaAtendente";
-
+import PendenciasAtraso from "../components/PendenciasAtraso";
 import { getUsuario } from "../utils/auth";
+import SaldoDiarioWidget from "../components/SaldoDiarioWidget";
+import RotasEmergenciais from "../components/RotasEmergenciais"; // <— aqui
 
 export default function Painel() {
   const location = useLocation();
@@ -30,8 +32,17 @@ export default function Painel() {
   const [tokenProcessado, setTokenProcessado] = useState(false);
   const usuario = getUsuario();
 
-  const cargo = role ? role.charAt(0).toUpperCase() + role.slice(1) : "—";
+  // controla o mês escolhido nos cards/a-receber
+  const currentYYYYMM = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  };
+  const [mesSelecionado, setMesSelecionado] = useState(currentYYYYMM());
 
+  // controla o modal de emergência
+  const [emergOpen, setEmergOpen] = useState(false);
+
+  const cargo = role ? role.charAt(0).toUpperCase() + role.slice(1) : "—";
   const dataFormatada = new Date().toLocaleDateString("pt-PT", {
     weekday: "long",
     day: "2-digit",
@@ -43,11 +54,10 @@ export default function Painel() {
   const headerRef = useRef(null);
   useEffect(() => {
     const applyHeaderVar = () => {
-      const h = headerRef.current?.offsetHeight ?? 72; // fallback
+      const h = headerRef.current?.offsetHeight ?? 72;
       document.documentElement.style.setProperty("--header-h", `${h}px`);
     };
     applyHeaderVar();
-
     const ro = new ResizeObserver(applyHeaderVar);
     if (headerRef.current) ro.observe(headerRef.current);
     window.addEventListener("resize", applyHeaderVar);
@@ -57,29 +67,26 @@ export default function Painel() {
     };
   }, []);
 
-  // 1) Processa usuário e decide padaria
+  // carrega usuário/padaria
   useEffect(() => {
     const u = getUsuario();
     if (!u) {
       navigate("/", { replace: true });
       return;
     }
-
     setRole(u.role);
-
     if (u.role === "admin") {
       if (padariaQueryId) setPadariaId(padariaQueryId);
       else setPadariaId(null);
     } else {
       setPadariaId(u.padaria || null);
     }
-
     setTokenProcessado(true);
   }, [padariaQueryId, navigate]);
 
   if (!tokenProcessado) return null;
 
-  // Admin sem padaria escolhida
+  // admin sem padaria selecionada
   if (role === "admin" && !padariaId) {
     const handleSelecionarPadaria = (id) => {
       setPadariaId(id);
@@ -90,35 +97,64 @@ export default function Painel() {
 
   if (!padariaId) return null;
 
-  // Entregador
+  // entregador
   if (role === "entregador") return <PainelEntregador />;
 
-  // Atendente
+  // atendente
   if (role === "atendente") return <CaixaAtendente padariaId={padariaId} />;
 
-  // Gerente/Admin
+  // gerente/admin
   return (
     <div className="min-h-screen bg-gray-100 text-gray-800">
       <header
         ref={headerRef}
-        className="bg-white shadow p-4 sticky top-0 z-[1200]"
+        className="sticky top-0 z-[1200] bg-blue-600 text-white shadow"
       >
-        <h1 className="text-2xl font-bold">Painel da Padaria</h1>
-        <p className="text-sm text-gray-500">
-          {cargo} • <span className="font-medium">{usuario?.nome || "—"}</span>{" "}
-          • {dataFormatada}
-        </p>
-        {padariaId && (
-          <p className="text-xs text-gray-400 mt-1">
-            ID da padaria: {padariaId}
-          </p>
-        )}
+        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
+          {/* título e subtítulo */}
+          <div>
+            <h1 className="text-2xl font-bold">Painel da Padaria</h1>
+            <p className="text-sm text-blue-100">
+              {cargo} •{" "}
+              <span className="font-semibold">{usuario?.nome || "—"}</span> •{" "}
+              {dataFormatada}
+            </p>
+            {padariaId && (
+              <p className="text-xs text-blue-200 mt-1">
+                ID da padaria: {padariaId}
+              </p>
+            )}
+          </div>
+
+          {/* saldo diário + botão emergência */}
+          <div className="flex items-center gap-3">
+            <SaldoDiarioWidget padariaId={padariaId} />
+            {(role === "gerente" || role === "admin") && (
+              <button
+                className="inline-flex items-center gap-2 rounded-xl bg-red-600 hover:bg-red-700 px-4 py-2 text-white font-medium shadow"
+                onClick={() => setEmergOpen(true)}
+                title="Juntar/redistribuir rotas (só hoje)"
+              >
+                <span className="i-lucide-alert-triangle" />
+                Emergência
+              </button>
+            )}
+          </div>
+        </div>
       </header>
 
       <main className="p-6 max-w-4xl mx-auto">
-        <AReceberPainel padariaId={padariaId} />
-        <FaturamentoMensal padariaId={padariaId} />
+        <AReceberPainel
+          padariaId={padariaId}
+          mes={mesSelecionado}
+          onMesChange={setMesSelecionado}
+        />
         <PagamentosFiltrados padariaId={padariaId} />
+        <FaturamentoMensal
+          padariaId={padariaId}
+          mesSelecionado={mesSelecionado}
+        />
+        <PendenciasAtraso padariaId={padariaId} gracaDia={8} />
         <ResumoFinanceiro padariaId={padariaId} />
         <ResumoEntregas padariaId={padariaId} />
         <RankingEntregadores padariaId={padariaId} />
@@ -127,7 +163,21 @@ export default function Painel() {
         <EntregasTempoReal padariaId={padariaId} />
         <MapaEntregadores padariaId={padariaId} />
         <NotificacoesRecentes padariaId={padariaId} />
+
+        {/* REMOVA qualquer linha solta como:
+            const usuario = JSON.parse(localStorage.getItem('usuario') || '{}');
+            {(usuario?.role === "gerente" ... ) && ( <RotasEmergenciais /> )}
+         */}
       </main>
+
+      {/* Modal centralizado */}
+      {(role === "gerente" || role === "admin") && (
+        <RotasEmergenciais
+          open={emergOpen}
+          onClose={() => setEmergOpen(false)}
+          padariaId={padariaId}
+        />
+      )}
     </div>
   );
 }

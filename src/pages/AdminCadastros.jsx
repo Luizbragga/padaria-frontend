@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-
+import { splitRouteB } from "../utils/routeSplit";
 // Padarias + Rotas
 import {
   listarPadarias,
@@ -288,7 +288,7 @@ export default function AdminCadastros() {
       return;
     }
 
-    // ZERO-MOD 2025-09-10: preço obrigatório + aceita vírgula
+    // preço obrigatório + aceita vírgula
     const precoNum = parseFloat(String(prodPreco).replace(",", "."));
     if (!Number.isFinite(precoNum) || precoNum <= 0) {
       setProdErro("Informe um preço válido (ex.: 0.63).");
@@ -351,7 +351,6 @@ export default function AdminCadastros() {
   }, [cFiltroPadaria, padarias.length]);
 
   // Carrega rotas + produtos da padaria (usados na área de clientes)
-  // ZERO-MOD 2025-09-10: não deixar produtos zerarem se rotas falharem
   async function reloadProdutosPadaria() {
     if (!cPadaria) return;
     setLoadingProdutos(true);
@@ -1096,105 +1095,62 @@ export default function AdminCadastros() {
         {cErro && <div className="text-red-600 text-sm mt-2">{cErro}</div>}
 
         {/* Lista de clientes recolhível */}
-        {mostrarClientes &&
-          createPortal(
-            <div
-              role="dialog"
-              aria-modal="true"
-              className="fixed inset-0 z-[9999] flex items-start md:items-center justify-center"
-              tabIndex={-1}
-              onKeyDown={(e) => e.key === "Escape" && setMostrarClientes(false)}
-            >
-              {/* Backdrop */}
-              <div
-                className="absolute inset-0 bg-black/30"
-                onClick={() => setMostrarClientes(false)}
-              />
-
-              {/* Caixa do modal */}
-              <div className="relative w-[min(96vw,1100px)] bg-white rounded-lg shadow-2xl ring-1 ring-black/5">
-                {/* Cabeçalho */}
-                <div className="flex items-center justify-between p-3 border-b">
-                  <h3 className="text-base font-semibold">Lista de clientes</h3>
-                  <button
-                    className="px-2 py-1 text-sm rounded border"
-                    onClick={() => setMostrarClientes(false)}
-                  >
-                    Fechar
-                  </button>
-                </div>
-
-                {/* Conteúdo com rolagem interna */}
-                <div className="max-h-[75vh] overflow-auto">
-                  <table className="min-w-full text-sm">
-                    <thead className="bg-gray-50 sticky top-0 z-10">
-                      <tr>
-                        <th className="text-left p-2">Nome</th>
-                        <th className="text-left p-2">Rota</th>
-                        <th className="text-left p-2">Endereço</th>
-                        <th className="text-left p-2">Telefone</th>
-                        <th className="text-left p-2 w-40">Ações</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {loadingClientes ? (
-                        <tr>
-                          <td className="p-2" colSpan={5}>
-                            Carregando…
-                          </td>
-                        </tr>
-                      ) : clientes.length === 0 ? (
-                        <tr>
-                          <td className="p-2" colSpan={5}>
-                            Sem clientes.
-                          </td>
-                        </tr>
-                      ) : (
-                        clientes.map((c) => (
-                          <tr key={c._id} className="border-t">
-                            <td className="p-2">{c.nome}</td>
-                            <td className="p-2">{c.rota || "—"}</td>
-                            <td className="p-2">{c.endereco}</td>
-                            <td className="p-2">{c.telefone || "—"}</td>
-                            <td className="p-2">
-                              <div className="flex gap-2">
-                                <button
-                                  className="px-2 py-1 border rounded"
-                                  onClick={() => {
-                                    setCEdit({ ...c });
-                                    prepararMatrizEditFromCliente(c);
-                                  }}
-                                >
-                                  Editar
-                                </button>
-                                <button
-                                  className="px-2 py-1 bg-red-600 text-white rounded"
-                                  onClick={() => onExcluirCliente(c._id)}
-                                >
-                                  Excluir
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* Rodapé */}
-                <div className="p-3 border-t text-right">
-                  <button
-                    className="px-3 py-1 rounded border"
-                    onClick={() => setMostrarClientes(false)}
-                  >
-                    Fechar
-                  </button>
-                </div>
-              </div>
-            </div>,
-            document.body
-          )}
+        {mostrarClientes && (
+          <div className="mt-6 overflow-auto rounded border">
+            <table className="min-w-full text-sm">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="text-left p-2">Nome</th>
+                  <th className="text-left p-2">Rota</th>
+                  <th className="text-left p-2">Endereço</th>
+                  <th className="text-left p-2">Telefone</th>
+                  <th className="text-left p-2 w-40">Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loadingClientes ? (
+                  <tr>
+                    <td className="p-2" colSpan={5}>
+                      Carregando…
+                    </td>
+                  </tr>
+                ) : clientes.length === 0 ? (
+                  <tr>
+                    <td className="p-2" colSpan={5}>
+                      Sem clientes.
+                    </td>
+                  </tr>
+                ) : (
+                  clientes.map((c) => (
+                    <tr key={c._id} className="border-t">
+                      <td className="p-2">{c.nome}</td>
+                      <td className="p-2">{c.rota || "—"}</td>
+                      <td className="p-2">{c.endereco}</td>
+                      <td className="p-2">{c.telefone || "—"}</td>
+                      <td className="p-2 flex gap-2">
+                        <button
+                          className="px-2 py-1 border rounded"
+                          onClick={() => {
+                            setCEdit({ ...c });
+                            prepararMatrizEditFromCliente(c);
+                          }}
+                        >
+                          Editar
+                        </button>
+                        <button
+                          className="px-2 py-1 bg-red-600 text-white rounded"
+                          onClick={() => onExcluirCliente(c._id)}
+                        >
+                          Excluir
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
 
         <div className="mt-3">
           <button
@@ -1395,165 +1351,6 @@ export default function AdminCadastros() {
                 onClick={onSalvarClienteEditado}
               >
                 Salvar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ====== PROD PICKER – NOVO ====== */}
-      {showProdPicker && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded p-4 w-[min(700px,95vw)]">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="font-semibold">Selecionar produtos</h3>
-              <button
-                className="px-3 py-1 border rounded"
-                onClick={() => setShowProdPicker(false)}
-              >
-                Fechar
-              </button>
-            </div>
-
-            <div className="mb-3 flex items-center gap-2">
-              <input
-                className="border rounded px-2 py-1 flex-1"
-                placeholder="Buscar produto…"
-                value={prodSearch}
-                onChange={(e) => setProdSearch(e.target.value)}
-              />
-              <button
-                className="px-2 py-1 border rounded"
-                onClick={() => {
-                  const ids = produtosFiltrados.map((p) => p._id);
-                  // alterna seleção: se todos filtrados já estão, desmarca; senão, marca todos
-                  const allSelected = ids.every((id) =>
-                    selectedProds.includes(id)
-                  );
-                  setSelectedProds((prev) =>
-                    allSelected
-                      ? prev.filter((id) => !ids.includes(id))
-                      : Array.from(new Set([...prev, ...ids]))
-                  );
-                }}
-              >
-                Selecionar/Desmarcar filtrados
-              </button>
-            </div>
-
-            <div className="max-h-[50vh] overflow-auto border rounded">
-              {produtosFiltrados.map((p) => (
-                <label
-                  key={p._id}
-                  className="flex items-center gap-2 p-2 border-b"
-                >
-                  <input
-                    type="checkbox"
-                    checked={selectedProds.includes(p._id)}
-                    onChange={(e) => {
-                      setSelectedProds((prev) =>
-                        e.target.checked
-                          ? [...prev, p._id]
-                          : prev.filter((id) => id !== p._id)
-                      );
-                    }}
-                  />
-                  <span>{p.nome || p.descricao || p._id}</span>
-                </label>
-              ))}
-              {produtosFiltrados.length === 0 && (
-                <div className="p-4 text-sm text-gray-500">
-                  Nenhum produto encontrado.
-                </div>
-              )}
-            </div>
-
-            <div className="text-right mt-3">
-              <button
-                className="px-3 py-1 bg-indigo-600 text-white rounded"
-                onClick={() => setShowProdPicker(false)}
-              >
-                Concluir ({selectedProds.length} selecionado
-                {selectedProds.length === 1 ? "" : "s"})
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ====== PROD PICKER – EDIÇÃO ====== */}
-      {showProdPickerEdit && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded p-4 w-[min(700px,95vw)]">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="font-semibold">Selecionar produtos</h3>
-              <button
-                className="px-3 py-1 border rounded"
-                onClick={() => setShowProdPickerEdit(false)}
-              >
-                Fechar
-              </button>
-            </div>
-
-            <div className="mb-3 flex items-center gap-2">
-              <input
-                className="border rounded px-2 py-1 flex-1"
-                placeholder="Buscar produto…"
-                value={prodSearchEdit}
-                onChange={(e) => setProdSearchEdit(e.target.value)}
-              />
-              <button
-                className="px-2 py-1 border rounded"
-                onClick={() => {
-                  const ids = produtosFiltradosEdit.map((p) => p._id);
-                  const allSelected = ids.every((id) =>
-                    selectedProdsEdit.includes(id)
-                  );
-                  setSelectedProdsEdit((prev) =>
-                    allSelected
-                      ? prev.filter((id) => !ids.includes(id))
-                      : Array.from(new Set([...prev, ...ids]))
-                  );
-                }}
-              >
-                Selecionar/Desmarcar filtrados
-              </button>
-            </div>
-
-            <div className="max-h-[50vh] overflow-auto border rounded">
-              {produtosFiltradosEdit.map((p) => (
-                <label
-                  key={p._id}
-                  className="flex items-center gap-2 p-2 border-b"
-                >
-                  <input
-                    type="checkbox"
-                    checked={selectedProdsEdit.includes(p._id)}
-                    onChange={(e) => {
-                      setSelectedProdsEdit((prev) =>
-                        e.target.checked
-                          ? [...prev, p._id]
-                          : prev.filter((id) => id !== p._id)
-                      );
-                    }}
-                  />
-                  <span>{p.nome || p.descricao || p._id}</span>
-                </label>
-              ))}
-              {produtosFiltradosEdit.length === 0 && (
-                <div className="p-4 text-sm text-gray-500">
-                  Nenhum produto encontrado.
-                </div>
-              )}
-            </div>
-
-            <div className="text-right mt-3">
-              <button
-                className="px-3 py-1 bg-indigo-600 text-white rounded"
-                onClick={() => setShowProdPickerEdit(false)}
-              >
-                Concluir ({selectedProdsEdit.length} selecionado
-                {selectedProdsEdit.length === 1 ? "" : "s"})
               </button>
             </div>
           </div>

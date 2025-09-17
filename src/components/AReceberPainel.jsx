@@ -5,8 +5,8 @@ import {
   listarAvulsasDoMes,
 } from "../services/analiticoService";
 import AvulsasModal from "./AvulsasModal";
-import ClientesListaModal from "./ClientesListaModal"; // <— NOVO
-import AReceberClienteModal from "./AReceberClienteModal"; // <— o seu modal atual
+import ClientesListaModal from "./ClientesListaModal";
+import AReceberClienteModal from "./AReceberClienteModal";
 
 const fmtEUR = new Intl.NumberFormat("pt-PT", {
   style: "currency",
@@ -17,8 +17,18 @@ function yyyymm(d = new Date()) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
-export default function AReceberPainel({ padariaId }) {
-  const [mes, setMes] = useState(yyyymm());
+export default function AReceberPainel({
+  padariaId,
+  mes: mesProp,
+  onMesChange,
+}) {
+  // controla localmente, mas sincroniza com o prop (se vier)
+  const [mes, setMes] = useState(mesProp || yyyymm());
+  useEffect(() => {
+    if (mesProp && mesProp !== mes) setMes(mesProp);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mesProp]);
+
   const [dados, setDados] = useState(null);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState("");
@@ -27,10 +37,10 @@ export default function AReceberPainel({ padariaId }) {
   const [abrirAvulsas, setAbrirAvulsas] = useState(false);
   const [avulsas, setAvulsas] = useState([]);
 
-  // Lista de clientes (modal novo)
+  // Lista de clientes (modal)
   const [abrirListaClientes, setAbrirListaClientes] = useState(false);
 
-  // Detalhe do cliente (seu modal atual)
+  // Detalhe do cliente
   const [modalOpen, setModalOpen] = useState(false);
   const [selCliente, setSelCliente] = useState({ id: null, nome: "" });
 
@@ -57,7 +67,8 @@ export default function AReceberPainel({ padariaId }) {
   async function abrirModalAvulsas() {
     try {
       const resp = await listarAvulsasDoMes(padariaId, mes);
-      setAvulsas(resp.itens); // agora vem em resp.itens
+      // compatível com { avulsas: [...] } ou { itens: [...] }
+      setAvulsas(resp?.avulsas || resp?.itens || []);
       setAbrirAvulsas(true);
     } catch (e) {
       console.error(e);
@@ -75,11 +86,19 @@ export default function AReceberPainel({ padariaId }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [padariaId, mes]);
 
-  const clientes = useMemo(() => {
-    return Array.isArray(dados?.clientes) ? dados.clientes : [];
-  }, [dados]);
-
+  const clientes = useMemo(
+    () => (Array.isArray(dados?.clientes) ? dados.clientes : []),
+    [dados]
+  );
   const totalClientes = clientes.length;
+
+  // ==== Totais exibidos nos cards (sem atrasados no previsto) ====
+  const previstoMesCard = Number(
+    dados?.previstoMesAtual ?? dados?.previstoMes ?? 0
+  );
+  const pagoMes = Number(dados?.pagoMes ?? 0);
+  const pendenteMesAtual = Number(dados?.pendenteAtual ?? 0);
+  const pendenciaAnterior = Number(dados?.pendenciaAnterior ?? 0);
 
   return (
     <div className="bg-white shadow rounded p-6 mt-6">
@@ -89,7 +108,11 @@ export default function AReceberPainel({ padariaId }) {
           <input
             type="month"
             value={mes}
-            onChange={(e) => setMes(e.target.value)}
+            onChange={(e) => {
+              const v = e.target.value;
+              setMes(v);
+              onMesChange?.(v);
+            }}
             className="border rounded px-2 py-1"
           />
           <button
@@ -130,34 +153,36 @@ export default function AReceberPainel({ padariaId }) {
         <>
           {/* Cards de totais */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-            <div className="bg-gray-50 rounded p-4 border">
+            <div className="bg-gray-50 rounded-lg p-4 border-[3px] border-blue-600">
               <div className="text-sm text-gray-500">Previsto no mês</div>
               <div className="text-xl font-semibold">
-                {fmtEUR.format(dados.previstoMes || 0)}
+                {fmtEUR.format(previstoMesCard)}
               </div>
             </div>
-            <div className="bg-gray-50 rounded p-4 border">
+
+            <div className="bg-gray-50 rounded-lg p-4 border-[3px] border-blue-600">
               <div className="text-sm text-gray-500">
                 Pago no mês (incl. avulsas)
               </div>
               <div className="text-xl font-semibold">
-                {fmtEUR.format(dados.pagoMes || 0)}
+                {fmtEUR.format(pagoMes)}
               </div>
             </div>
-            <div className="bg-gray-50 rounded p-4 border">
+
+            <div className="bg-gray-50 rounded-lg p-4 border-[3px] border-blue-600">
               <div className="text-sm text-gray-500">Pendente (mês atual)</div>
               <div className="text-xl font-semibold">
-                {fmtEUR.format(dados.pendenteAtual || 0)}
+                {fmtEUR.format(pendenteMesAtual)}
               </div>
             </div>
-            <div className="bg-gray-50 rounded p-4 border">
+
+            <div className="bg-gray-50 rounded-lg p-4 border-[3px] border-blue-600">
               <div className="text-sm text-gray-500">Pendência anterior</div>
               <div className="text-xl font-semibold">
-                {fmtEUR.format(dados.pendenciaAnterior || 0)}
+                {fmtEUR.format(pendenciaAnterior)}
               </div>
             </div>
           </div>
-          {/* A tabela foi removida; a lista abre no modal */}
         </>
       )}
 

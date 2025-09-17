@@ -86,7 +86,7 @@ export async function listarAvulsasDoMes(padariaId, mes) {
     if (mes) params.mes = mes;
 
     const { data } = await http.get("/analitico/avulsas", { params });
-    // backend retorna: { mes, total, avulsas: [...] }
+    // backend: { mes, total, avulsas: [...] }
     return {
       mes: data?.mes ?? mes ?? "",
       total: Number(data?.total ?? 0),
@@ -98,15 +98,53 @@ export async function listarAvulsasDoMes(padariaId, mes) {
   }
 }
 
-/**
- * GET /api/clientes/:id/padrao-semanal
- * Retorna { clienteId, nome, padraoSemanal: { domingo: [...], ... } }
- */
+/** GET /api/clientes/:id/padrao-semanal */
 export async function buscarPadraoSemanalCliente(clienteId) {
   if (!clienteId) throw new Error("clienteId inválido");
   const { data } = await http.get(`/api/clientes/${clienteId}/padrao-semanal`);
-  return data;
+  return data; // { clienteId, nome, inicioCicloFaturamento, padraoSemanal }
 }
+
+/** PUT /api/clientes/:id/padrao-semanal  { padraoSemanal } */
+export async function setPadraoSemanalCliente(clienteId, padraoSemanal) {
+  if (!clienteId) throw new Error("clienteId inválido");
+  const { data } = await http.put(`/api/clientes/${clienteId}/padrao-semanal`, {
+    padraoSemanal,
+  });
+  return data; // { ok: true }
+}
+
+/** POST /api/clientes/:id/ajuste-pontual  { data, tipo, itens } (+ ?padaria= ) */
+export async function registrarAjustePontual(clienteId, padariaId, payload) {
+  if (!clienteId) throw new Error("clienteId inválido");
+  const { data } = await http.post(
+    `/api/clientes/${clienteId}/ajuste-pontual`,
+    payload,
+    { params: { padaria: padariaId } }
+  );
+  return data; // { ok: true, ajuste }
+}
+
+/** GET /api/clientes/:id/ajustes?ini=YYYY-MM-DD&fim=YYYY-MM-DD */
+export async function listarAjustesPontuais(clienteId, ini, fim) {
+  if (!clienteId) throw new Error("clienteId inválido");
+  const { data } = await http.get(`/api/clientes/${clienteId}/ajustes`, {
+    params: { ini, fim },
+  });
+  return data; // { ajustes: [...] }
+}
+
+/** POST /api/clientes/:id/solicitar-alteracao  { dados } (+ ?padaria= ) */
+export async function solicitarAlteracaoCliente(clienteId, padariaId, dados) {
+  if (!clienteId) throw new Error("clienteId inválido");
+  const { data } = await http.post(
+    `/api/clientes/${clienteId}/solicitar-alteracao`,
+    { dados },
+    { params: { padaria: padariaId } }
+  );
+  return data; // { ok: true, solicitacaoId }
+}
+/* ================== PAGAMENTOS ================== */
 
 /**
  * Pagamentos do mês para UM cliente.
@@ -139,7 +177,9 @@ export async function buscarPagamentosDoMesCliente(padariaId, clienteId, mes) {
   });
 
   const todos = Array.isArray(data?.pagamentos) ? data.pagamentos : [];
-  const itens = todos.filter((p) => String(p.cliente) === String(clienteId));
+  const itens = todos.filter(
+    (p) => String(p.clienteId ?? p.cliente ?? "") === String(clienteId)
+  );
   const total = itens.reduce((s, p) => s + (Number(p.valor) || 0), 0);
 
   return { total, pagamentos: itens };
@@ -168,7 +208,8 @@ export async function buscarPagamentosDetalhados({
   const { data } = await http.get("/analitico/pagamentos", { params });
   return data; // { pagamentos, totalRecebido, clientesPagantes }
 }
-// Registrar pagamento diretamente para um cliente (usado pelo gerente no painel)
+
+/** Registrar pagamento diretamente para um cliente (usado pelo gerente no painel) */
 export async function registrarPagamentoCliente(
   clienteId,
   { valor, forma, data, mes }
@@ -178,11 +219,29 @@ export async function registrarPagamentoCliente(
     valor: Number(valor),
     forma,
     data, // "YYYY-MM-DD"
-    mes, // opcional; o backend pode usar para conciliação no mês
+    mes, // opcional
   };
   const { data: resp } = await http.post(
     `/clientes/${clienteId}/registrar-pagamento`,
     payload
   );
   return resp;
+}
+
+/* =====================  PENDÊNCIAS (NOVO)  ===================== */
+export async function buscarPendenciasAno(padariaId, ano, gracaDia = 8) {
+  if (!padariaId) throw new Error("padariaId é obrigatório");
+  const { data } = await http.get("/analitico/pendencias-anuais", {
+    params: { padaria: padariaId, ano, gracaDia },
+  });
+  return data;
+}
+
+export async function buscarPendenciasDoMes(padariaId, mes, gracaDia = 8) {
+  if (!padariaId) throw new Error("padariaId é obrigatório");
+  if (!mes) throw new Error("mes é obrigatório (YYYY-MM)");
+  const { data } = await http.get("/analitico/pendencias-do-mes", {
+    params: { padaria: padariaId, mes, gracaDia },
+  });
+  return data;
 }

@@ -40,3 +40,16 @@
 .read-the-docs {
   color: #888;
 }
+/* === Tema: fundo mais escuro da aplicação === */
+html,
+body,
+#root {
+  background-color: #eef2f7; /* cinza claro (estilo slate-100/200) */
+  min-height: 100%;
+}
+html,
+body,
+#root {
+  background-color: #eef2f7; /* cinza claro (estilo slate-100/200) */
+  min-height: 100%;
+}

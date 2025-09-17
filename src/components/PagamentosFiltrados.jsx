@@ -10,7 +10,6 @@ const fmtEUR = new Intl.NumberFormat("pt-PT", {
   currency: "EUR",
 });
 
-// helper para YYYY-MM (mês corrente)
 function mesAtualStr() {
   const d = new Date();
   const y = d.getFullYear();
@@ -25,7 +24,6 @@ export default function PagamentosFiltrados({
   dataFinal = "",
   forma = "",
 }) {
-  // ⚠️ TODOS os hooks ficam DENTRO do componente:
   const [filtros, setFiltros] = useState({
     dataEspecifica,
     dataInicial,
@@ -33,12 +31,12 @@ export default function PagamentosFiltrados({
     forma,
   });
 
-  const [lista, setLista] = useState([]); // pagamentos filtrados
+  const [lista, setLista] = useState([]);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState("");
 
-  // resumo (cartões do topo do bloco)
   const [resumoMes, setResumoMes] = useState({
+    // totalRecebidoMes NÃO é mais exibido no card (usamos total da listagem)
     totalRecebidoMes: 0,
     pendenciaAnterior: 0,
     inadimplentes: 0,
@@ -47,7 +45,6 @@ export default function PagamentosFiltrados({
   const vivo = useRef(true);
   const mesAtual = mesAtualStr();
 
-  // handlers
   function onChangeFiltro(e) {
     setFiltros((prev) => ({ ...prev, [e.target.name]: e.target.value }));
   }
@@ -57,20 +54,18 @@ export default function PagamentosFiltrados({
     return Boolean(f.dataEspecifica || f.dataInicial || f.dataFinal || f.forma);
   }, [filtros]);
 
-  // carrega o resumo (sem depender de filtros)
+  // resumo (apenas para pendência anterior e inadimplentes)
   useEffect(() => {
     vivo.current = true;
-
     async function carregarResumo() {
       if (!padariaId) return;
       try {
         const ar = await buscarAReceber(padariaId, mesAtual);
         if (!vivo.current) return;
-
         setResumoMes({
-          totalRecebidoMes: Number(ar?.pagoMes || 0), // inclui avulsas
+          totalRecebidoMes: Number(ar?.pagoMes || 0),
           pendenciaAnterior: Number(ar?.pendenciaAnterior || 0),
-          inadimplentes: Number(ar?.inadimplentes || 0), // só pendentes de meses anteriores
+          inadimplentes: Number(ar?.inadimplentes || 0),
         });
       } catch (e) {
         console.error("Erro no resumo de pagamentos:", e);
@@ -82,17 +77,15 @@ export default function PagamentosFiltrados({
         });
       }
     }
-
     carregarResumo();
     return () => {
       vivo.current = false;
     };
   }, [padariaId, mesAtual]);
 
-  // busca a listagem quando filtros mudam
+  // lista filtrada
   useEffect(() => {
     vivo.current = true;
-
     async function carregarLista() {
       if (!padariaId || !aplicouFiltro) {
         setLista([]);
@@ -101,7 +94,6 @@ export default function PagamentosFiltrados({
       }
       setCarregando(true);
       setErro("");
-
       try {
         const { dataEspecifica, dataInicial, dataFinal, forma } = filtros;
         const resp = await buscarPagamentosDetalhados({
@@ -112,7 +104,6 @@ export default function PagamentosFiltrados({
           forma,
         });
         if (!vivo.current) return;
-
         const arr = Array.isArray(resp?.pagamentos) ? resp.pagamentos : [];
         setLista(arr);
       } catch (e) {
@@ -124,38 +115,33 @@ export default function PagamentosFiltrados({
         if (vivo.current) setCarregando(false);
       }
     }
-
     carregarLista();
     return () => {
       vivo.current = false;
     };
   }, [padariaId, filtros, aplicouFiltro]);
 
-  // totais da lista (apenas quando tiver filtro aplicado)
+  // total da listagem filtrada (vai para o card “Valor recebido nesse filtro”)
   const totalLista = useMemo(() => {
-    const total = (lista || []).reduce(
-      (s, p) => s + (Number(p?.valor) || 0),
-      0
-    );
-    return total;
+    return (lista || []).reduce((s, p) => s + (Number(p?.valor) || 0), 0);
   }, [lista]);
 
   return (
     <div className="bg-white p-4 rounded shadow mb-4">
-      <h3 className="font-bold mb-3">Pagamentos Filtrados</h3>
+      <h3 className="text-lg font-bold mb-4">Pagamentos Filtrados</h3>
 
-      {/* Cards do RESUMO (mês corrente e pendências do anterior) */}
+      {/* Cards do RESUMO */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
-        <div className="rounded border p-3 bg-gray-50">
+        <div className="bg-gray-50 rounded-lg p-4 border-[3px] border-blue-600">
           <div className="text-sm text-gray-600">
-            Total Recebido (mês {mesAtual})
+            Valor recebido nesse filtro
           </div>
           <div className="text-xl font-semibold">
-            {fmtEUR.format(resumoMes.totalRecebidoMes || 0)}
+            {fmtEUR.format(aplicouFiltro ? totalLista : 0)}
           </div>
         </div>
 
-        <div className="rounded border p-3 bg-gray-50">
+        <div className="bg-gray-50 rounded-lg p-4 border-[3px] border-blue-600">
           <div className="text-sm text-gray-600">
             Total Pendente (mês anterior)
           </div>
@@ -164,7 +150,7 @@ export default function PagamentosFiltrados({
           </div>
         </div>
 
-        <div className="rounded border p-3 bg-gray-50">
+        <div className="bg-gray-50 rounded-lg p-4 border-[3px] border-blue-600">
           <div className="text-sm text-gray-600">Clientes Inadimplentes</div>
           <div className="text-xl font-semibold text-blue-600">
             {resumoMes.inadimplentes || 0}
@@ -178,9 +164,11 @@ export default function PagamentosFiltrados({
         forma) para ver os resultados da <strong>listagem</strong>.
       </p>
 
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-3 mb-2">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-2">
         <div>
-          <label className="block text-sm">Data específica</label>
+          <label className="block text-sm font-semibold text-blue-600">
+            Data específica
+          </label>
           <input
             type="date"
             name="dataEspecifica"
@@ -190,7 +178,9 @@ export default function PagamentosFiltrados({
           />
         </div>
         <div>
-          <label className="block text-sm">Data inicial</label>
+          <label className="block text-sm font-semibold text-blue-600">
+            Data inicial
+          </label>
           <input
             type="date"
             name="dataInicial"
@@ -200,7 +190,9 @@ export default function PagamentosFiltrados({
           />
         </div>
         <div>
-          <label className="block text-sm">Data final</label>
+          <label className="block text-sm font-semibold text-blue-600">
+            Data final
+          </label>
           <input
             type="date"
             name="dataFinal"
@@ -210,7 +202,9 @@ export default function PagamentosFiltrados({
           />
         </div>
         <div>
-          <label className="block text-sm">Forma de pagamento</label>
+          <label className="block text-sm font-semibold text-blue-600">
+            Forma de pagamento
+          </label>
           <select
             name="forma"
             value={filtros.forma}
@@ -223,22 +217,9 @@ export default function PagamentosFiltrados({
             <option value="mbway">MB Way</option>
           </select>
         </div>
-
-        {/* resumo do total da LISTA (só quando há filtro) */}
-        <div className="flex items-end">
-          <div className="text-sm text-gray-600">
-            {aplicouFiltro ? (
-              <span>
-                <strong>Total da listagem:</strong> {fmtEUR.format(totalLista)}
-              </span>
-            ) : (
-              <span>Nenhum filtro aplicado.</span>
-            )}
-          </div>
-        </div>
       </div>
 
-      {/* Tabela só aparece se tiver filtro */}
+      {/* Tabela apenas quando há filtro */}
       {aplicouFiltro && (
         <>
           {carregando ? (
