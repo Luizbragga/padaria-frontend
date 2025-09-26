@@ -83,7 +83,7 @@ export default function CaixaAtendente() {
 
     async function carregarRotas() {
       try {
-        const { data } = await http.get("/rotas/nomes", {
+        const { data } = await http.get("´rotas/nomes", {
           params: padariaId ? { padaria: padariaId } : undefined,
         });
         if (!vivo) return;
@@ -118,7 +118,7 @@ export default function CaixaAtendente() {
       if (buscaNome) params.buscaNome = buscaNome;
       if (buscaEndereco) params.buscaEndereco = buscaEndereco;
 
-      const { data } = await http.get("/api/clientes", { params });
+      const { data } = await http.get("api/clientes", { params });
 
       if (reqId === lastReqId.current) {
         setClientes(Array.isArray(data) ? data : []);

@@ -1,5 +1,5 @@
 // src/services/rotasSplitService.js
-import http from "./http";
+import http from "./api";
 
 export async function listarRotas(padariaId) {
   const { data } = await http.get("/rotas/nomes", {

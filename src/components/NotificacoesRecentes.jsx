@@ -1,8 +1,16 @@
 import React, { useEffect, useRef, useState } from "react";
 import axios from "axios";
 import { getToken, getUsuario } from "../utils/auth";
+import { API_BASE } from "../services/http";
 
-const API_URL = import.meta.env.VITE_API_URL ?? "";
+const buildUrl = (path, params) => {
+  const u = new URL(path.replace(/^\/+/, ""), API_BASE);
+  if (params)
+    Object.entries(params).forEach(
+      ([k, v]) => v != null && u.searchParams.set(k, v)
+    );
+  return u.href;
+};
 
 // Normaliza vários formatos do backend
 function normalizaEventos(input) {
@@ -61,11 +69,11 @@ export default function NotificacoesRecentes({ padariaId }) {
       setErro("");
       const token = getToken();
       const { data } = await axios.get(
-        `${API_URL}/analitico/notificacoes-recentes`,
-        {
-          params: padariaId ? { padaria: padariaId } : {},
-          headers: { Authorization: `Bearer ${token}` },
-        }
+        buildUrl(
+          "analitico/notificacoes-recentes",
+          padariaId ? { padaria: padariaId } : {}
+        ),
+        { headers: { Authorization: `Bearer ${token}` } }
       );
       if (!aliveRef.current) return;
       setEventos(normalizaEventos(data));

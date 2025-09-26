@@ -1,8 +1,7 @@
 // src/components/ResumoFinanceiro.jsx
 import React, { useEffect, useRef, useState } from "react";
 import { getToken, getUsuario } from "../utils/auth";
-
-const API_URL = import.meta.env.VITE_API_URL ?? "";
+import { API_BASE } from "../services/http";
 
 function normalizaResumo(input) {
   const src =
@@ -60,10 +59,11 @@ export default function ResumoFinanceiro({ padariaId }) {
           return;
         }
 
-        const resp = await fetch(
-          `${API_URL}/analitico/resumo-financeiro?padaria=${padariaId}`,
-          { headers: { Authorization: `Bearer ${getToken()}` } }
-        );
+        const u = new URL("analitico/resumo-financeiro", API_BASE);
+        u.searchParams.set("padaria", padariaId);
+        const resp = await fetch(u.href, {
+          headers: { Authorization: `Bearer ${getToken()}` },
+        });
 
         // Sem conteúdo ou não encontrado => trata como "sem dados", sem erro visual
         if (resp.status === 204 || resp.status === 404) {

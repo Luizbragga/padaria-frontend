@@ -1,10 +1,5 @@
 // src/services/api.js
-import { post as httpPost } from "./http";
+import http, { get, post, put, del, API_BASE } from "./http";
 
-export const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:4001";
-
-// POST genérico usando o cliente central (com refresh automático)
-export async function post(path, body, options = {}) {
-  // usa o helper post nomeado do http.js
-  return await httpPost(path, body, options);
-}
+export { http, get, post, put, del, API_BASE };
+export default http;

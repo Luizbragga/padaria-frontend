@@ -100,7 +100,7 @@ export default function LocalizacaoEntregadores({ padariaId }) {
       setErro("");
       const token = getToken();
       const { data } = await axios.get(
-        `${API_URL}/analitico/localizacao-entregadores`,
+        `${API_URL}´analitico/localizacao-entregadores`,
         {
           params: padariaId ? { padaria: padariaId } : {},
           headers: { Authorization: `Bearer ${token}` },

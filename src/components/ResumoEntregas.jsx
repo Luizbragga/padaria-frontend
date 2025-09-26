@@ -11,9 +11,17 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts";
-import axios from "axios";
 
-const API_URL = import.meta.env.VITE_API_URL ?? "";
+import axios from "axios";
+import { API_BASE } from "../services/http";
+const buildUrl = (path, params) => {
+  const u = new URL(path.replace(/^\/+/, ""), API_BASE);
+  if (params)
+    Object.entries(params).forEach(
+      ([k, v]) => v != null && u.searchParams.set(k, v)
+    );
+  return u.href;
+};
 
 /** Normaliza saída: aceita já-agrupado OU lista crua de entregas */
 function normalizaOuAgrega(input) {
@@ -84,12 +92,12 @@ export default function ResumoEntregas({ padariaId }) {
           // 1) tenta endpoint analítico do próprio entregador
           try {
             resp = await axios.get(
-              `${API_URL}/analitico/entregas-por-dia?mine=1`,
+              buildUrl("analitico/entregas-por-dia", { mine: 1 }),
               auth
             );
           } catch {
             // 2) fallback: pega lista crua e agregamos aqui
-            resp = await axios.get(`${API_URL}/entregas/minhas`, auth);
+            resp = await axios.get(buildUrl("entregas/minhas"), auth);
           }
         } else {
           if (!padariaId) {
@@ -100,13 +108,13 @@ export default function ResumoEntregas({ padariaId }) {
           // 1) tenta endpoint analítico da padaria
           try {
             resp = await axios.get(
-              `${API_URL}/analitico/entregas-por-dia?padaria=${padariaId}`,
+              buildUrl("analitico/entregas-por-dia", { padaria: padariaId }),
               auth
             );
           } catch {
             // 2) fallback: pega lista crua por padaria (ajuste se seu backend usar outro caminho)
             resp = await axios.get(
-              `${API_URL}/entregas?padaria=${padariaId}`,
+              buildUrl("entregas", { padaria: padariaId }),
               auth
             );
           }

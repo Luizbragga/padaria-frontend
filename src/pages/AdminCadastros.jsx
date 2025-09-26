@@ -1,11 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { splitRouteB } from "../utils/routeSplit";
 // Padarias + Rotas
 import {
   listarPadarias,
   criarPadaria,
   listarRotasPadaria,
-  criarRota,
 } from "../services/padariaService";
 
 // Usuários
@@ -22,6 +20,7 @@ import {
   listarClientes,
   atualizarCliente,
   excluirCliente,
+  obterPadraoCliente,
 } from "../services/clienteService";
 
 // Produtos
@@ -43,6 +42,30 @@ const rotuloDia = {
   dom: "Dom",
 };
 
+// Converte {domingo..sabado:[{produtoId|produto, quantidade}]}
+// -> {seg..dom:[{produto, quantidade}]}
+function apiToPedido(padrao = {}) {
+  const map = {
+    domingo: "dom",
+    segunda: "seg",
+    terca: "ter",
+    quarta: "qua",
+    quinta: "qui",
+    sexta: "sex",
+    sabado: "sab",
+  };
+  const out = { seg: [], ter: [], qua: [], qui: [], sex: [], sab: [], dom: [] };
+  for (const [k, arr] of Object.entries(padrao || {})) {
+    const key = map[k] || k;
+    const itens = Array.isArray(arr) ? arr : [];
+    out[key] = itens.map((i) => ({
+      produto: i.produtoId || i.produto,
+      quantidade: Number(i.quantidade) || 0,
+    }));
+  }
+  return out;
+}
+
 export default function AdminCadastros() {
   /* ============== PADARIAS ============== */
   const [padarias, setPadarias] = useState([]);
@@ -51,9 +74,24 @@ export default function AdminCadastros() {
   const [pNome, setPNome] = useState("");
   const [pCidade, setPCidade] = useState("");
   const [pAtiva, setPAtiva] = useState(true);
-  const [pRotasText, setPRotasText] = useState(""); // "A,B,C"
+  const [pFreguesia, setPFreguesia] = useState("");
+  const [pRotas, setPRotas] = useState([""]);
   const [pSaving, setPSaving] = useState(false);
   const [pErro, setPErro] = useState("");
+
+  function addRotaField() {
+    setPRotas((r) => [...r, ""]);
+  }
+  function updateRotaField(idx, val) {
+    setPRotas((r) => {
+      const copy = [...r];
+      copy[idx] = (val || "").toUpperCase();
+      return copy;
+    });
+  }
+  function removeRotaField(idx) {
+    setPRotas((r) => (r.length > 1 ? r.filter((_, i) => i !== idx) : r));
+  }
 
   /* ============== USUÁRIOS ============== */
   const [uNome, setUNome] = useState("");
@@ -84,16 +122,13 @@ export default function AdminCadastros() {
   const [cPadaria, setCPadaria] = useState("");
   const [rotasPadaria, setRotasPadaria] = useState([]);
 
-  // produtos usados na grade de padrão semanal (para a padaria atual do cliente)
   const [produtos, setProdutos] = useState([]);
   const [loadingProdutos, setLoadingProdutos] = useState(false);
 
-  // seleção de produtos para NOVO cliente (evita listar 100 de uma vez)
   const [selectedProds, setSelectedProds] = useState([]);
   const [showProdPicker, setShowProdPicker] = useState(false);
   const [prodSearch, setProdSearch] = useState("");
 
-  // seleção de produtos para EDITAR cliente
   const [selectedProdsEdit, setSelectedProdsEdit] = useState([]);
   const [showProdPickerEdit, setShowProdPickerEdit] = useState(false);
   const [prodSearchEdit, setProdSearchEdit] = useState("");
@@ -114,10 +149,9 @@ export default function AdminCadastros() {
   const [loadingClientes, setLoadingClientes] = useState(false);
   const [mostrarClientes, setMostrarClientes] = useState(false);
   const [cEdit, setCEdit] = useState(null);
+  const [cView, setCView] = useState(null);
 
-  // Matriz Produto × Dia (novo)
   const [matriz, setMatriz] = useState({});
-  // Matriz Produto × Dia (edição)
   const [matrizEdit, setMatrizEdit] = useState({});
 
   /* ============= BOOT: carrega padarias ============= */
@@ -145,25 +179,28 @@ export default function AdminCadastros() {
   async function onCriarPadaria(e) {
     e.preventDefault();
     setPErro("");
-    if (!pNome.trim() || !pCidade.trim()) {
-      setPErro("Preencha nome e cidade.");
+    if (!pNome.trim() || !pCidade.trim() || !pFreguesia.trim()) {
+      setPErro("Preencha nome, cidade e freguesia.");
       return;
     }
     try {
       setPSaving(true);
+
+      const rotasDisponiveis = pRotas
+        .map((s) =>
+          String(s || "")
+            .trim()
+            .toUpperCase()
+        )
+        .filter(Boolean);
+
       const nova = await criarPadaria({
         nome: pNome.trim(),
         cidade: pCidade.trim(),
+        freguesia: pFreguesia.trim(),
         ativa: !!pAtiva,
+        rotasDisponiveis,
       });
-
-      const nomes = pRotasText
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean);
-      for (const nome of nomes) {
-        await criarRota({ padaria: nova._id, nome, ativa: true });
-      }
 
       setPadarias((prev) => [nova, ...prev]);
       if (!uPadaria) setUPadaria(nova._id);
@@ -174,8 +211,9 @@ export default function AdminCadastros() {
 
       setPNome("");
       setPCidade("");
+      setPFreguesia("");
       setPAtiva(true);
-      setPRotasText("");
+      setPRotas([""]);
       alert("Padaria criada com sucesso!");
     } catch (e) {
       console.error(e);
@@ -185,7 +223,7 @@ export default function AdminCadastros() {
     }
   }
 
-  /* ============= USUÁRIOS: listar/criar/editar/excluir ============= */
+  /* ============= USUÁRIOS ============= */
   async function reloadUsers() {
     setLoadingUsers(true);
     try {
@@ -202,7 +240,6 @@ export default function AdminCadastros() {
   }
   useEffect(() => {
     if (padarias.length) reloadUsers();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uFiltroPadaria, padarias.length]);
 
   async function onCriarUsuario(e) {
@@ -276,7 +313,6 @@ export default function AdminCadastros() {
   }
   useEffect(() => {
     if (padarias.length) reloadProdLista();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prPadaria, padarias.length]);
 
   async function onCriarProduto(e) {
@@ -288,7 +324,6 @@ export default function AdminCadastros() {
       return;
     }
 
-    // preço obrigatório + aceita vírgula
     const precoNum = parseFloat(String(prodPreco).replace(",", "."));
     if (!Number.isFinite(precoNum) || precoNum <= 0) {
       setProdErro("Informe um preço válido (ex.: 0.63).");
@@ -300,7 +335,7 @@ export default function AdminCadastros() {
       await criarProduto({
         padaria: prPadaria,
         nome: prodNome.trim(),
-        preco: +precoNum.toFixed(2), // arredonda para 2 casas (número)
+        preco: +precoNum.toFixed(2),
         ativo: !!prodAtivo,
       });
 
@@ -347,62 +382,98 @@ export default function AdminCadastros() {
   }
   useEffect(() => {
     if (padarias.length) reloadClientes();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cFiltroPadaria, padarias.length]);
-
-  // Carrega rotas + produtos da padaria (usados na área de clientes)
+  // ===== CLIENTES: carregar PRODUTOS da padaria selecionada (para o padrão semanal) =====
   async function reloadProdutosPadaria() {
-    if (!cPadaria) return;
+    if (!cPadaria) {
+      setProdutos([]);
+      setMatriz({});
+      setSelectedProds([]);
+      return;
+    }
     setLoadingProdutos(true);
     try {
-      // rotas: erro não bloqueia produtos
-      try {
-        const rs = await listarRotasPadaria(cPadaria);
-        setRotasPadaria(rs);
-      } catch (e) {
-        console.warn("listarRotasPadaria falhou:", e?.response?.status || e);
-        setRotasPadaria([]);
-      }
-
-      // produtos: sempre tentar carregar
-      let ps = [];
-      try {
-        ps = await listarProdutos({ padaria: cPadaria });
-      } catch (e) {
-        console.error("listarProdutos falhou:", e);
-        ps = [];
-      }
+      const ps = await listarProdutos({ padaria: cPadaria });
       const arr = Array.isArray(ps) ? ps : [];
       setProdutos(arr);
 
-      // reconstroi a matriz para os produtos disponíveis
+      // recria a matriz de quantidades para o padrão semanal
       const init = {};
-      for (const p of arr)
+      for (const p of arr) {
         init[p._id] = DIAS.reduce((a, d) => ((a[d] = 0), a), {});
+      }
       setMatriz(init);
+      setSelectedProds([]); // limpa seleção ao trocar de padaria
+    } catch (e) {
+      console.error("Falha ao carregar produtos:", e);
+      setProdutos([]);
+      setMatriz({});
       setSelectedProds([]);
     } finally {
       setLoadingProdutos(false);
     }
   }
-
   useEffect(() => {
     reloadProdutosPadaria();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cPadaria]);
+  // Rotas + produtos da padaria do formulário de clientes
+  // ===== CLIENTES: carregar ROTAS da padaria selecionada (sempre todas) =====
+  useEffect(() => {
+    if (!cPadaria) {
+      setRotasPadaria([]);
+      setCRota("");
+      return;
+    }
+    (async () => {
+      try {
+        const nomes = await listarRotasPadaria(cPadaria); // strings
+        setRotasPadaria(nomes);
+        // opcional: se a rota atual não existe mais, reseta
+        setCRota((r) => (nomes.includes(r) ? r : ""));
+      } catch (e) {
+        console.error("Falha ao carregar rotas:", e);
+        setRotasPadaria([]);
+        setCRota("");
+      }
+    })();
   }, [cPadaria]);
 
+  // curto -> longo aceito pelo backend
+  const MAP_SHORT_TO_LONG = {
+    dom: "domingo",
+    seg: "segunda",
+    ter: "terca",
+    qua: "quarta",
+    qui: "quinta",
+    sex: "sexta",
+    sab: "sabado",
+  };
+
   function compilarPedidoSemanal(fromMatriz, selected) {
-    const pedido = {};
-    for (const d of DIAS) pedido[d] = [];
+    const padrao = {
+      domingo: [],
+      segunda: [],
+      terca: [],
+      quarta: [],
+      quinta: [],
+      sexta: [],
+      sabado: [],
+    };
+
     for (const p of produtos) {
       if (!selected.includes(p._id)) continue;
       const linha = fromMatriz[p._id] || {};
+
       for (const d of DIAS) {
+        // DIAS = ["seg","ter","qua","qui","sex","sab","dom"]
         const qtd = Number(linha[d] || 0);
-        if (qtd > 0) pedido[d].push({ produto: p._id, quantidade: qtd });
+        if (qtd > 0) {
+          const longKey = MAP_SHORT_TO_LONG[d]; // "segunda", "terca", ...
+          padrao[longKey].push({ produto: p._id, quantidade: qtd });
+        }
       }
     }
-    return pedido;
+    return padrao;
   }
 
   async function onCriarCliente(e) {
@@ -424,7 +495,7 @@ export default function AdminCadastros() {
     }
     try {
       setCSaving(true);
-      const pedidoSemanal = compilarPedidoSemanal(matriz, selectedProds);
+      const padraoSemanal = compilarPedidoSemanal(matriz, selectedProds);
       await criarCliente({
         padaria: cPadaria,
         nome: cNome.trim(),
@@ -435,9 +506,9 @@ export default function AdminCadastros() {
         ...(cEmail ? { email: cEmail.trim().toLowerCase() } : {}),
         ...(cObs ? { observacoes: cObs.trim() } : {}),
         ...(cInicio ? { inicioCicloFaturamento: cInicio } : {}),
-        pedidoSemanal,
+        padraoSemanal,
       });
-      // limpa form
+
       setCNome("");
       setCEndereco("");
       setCRota("");
@@ -447,12 +518,9 @@ export default function AdminCadastros() {
       setCEmail("");
       setCObs("");
       setCInicio("");
-      // zera quantidades dos selecionados
       setMatriz((prev) => {
         const copy = { ...prev };
-        for (const id of selectedProds) {
-          for (const d of DIAS) copy[id][d] = 0;
-        }
+        for (const id of selectedProds) for (const d of DIAS) copy[id][d] = 0;
         return copy;
       });
       setSelectedProds([]);
@@ -480,7 +548,6 @@ export default function AdminCadastros() {
     }
     setMatrizEdit(base);
 
-    // pré-seleciona os produtos que já tinham quantidade
     const sel = [];
     for (const p of produtos) {
       const linha = base[p._id];
@@ -493,7 +560,7 @@ export default function AdminCadastros() {
   async function onSalvarClienteEditado() {
     if (!cEdit) return;
     try {
-      const pedidoSemanal = compilarPedidoSemanal(
+      const padraoSemanal = compilarPedidoSemanal(
         matrizEdit,
         selectedProdsEdit
       );
@@ -503,7 +570,7 @@ export default function AdminCadastros() {
         rota: cEdit.rota || null,
         telefone: cEdit.telefone || undefined,
         email: cEdit.email || undefined,
-        pedidoSemanal,
+        padraoSemanal,
       };
       await atualizarCliente(cEdit._id, payload);
       setCEdit(null);
@@ -576,11 +643,45 @@ export default function AdminCadastros() {
           />
           <input
             className="border rounded px-2 py-1"
-            placeholder="Rotas (A,B,C...)"
-            value={pRotasText}
-            onChange={(e) => setPRotasText(e.target.value)}
+            placeholder="Freguesia"
+            value={pFreguesia}
+            onChange={(e) => setPFreguesia(e.target.value)}
           />
-          <div className="flex items-center gap-3">
+
+          <div className="md:col-span-6">
+            <div className="text-sm text-gray-600 mb-1">Rotas</div>
+            <div className="flex flex-col gap-2">
+              {pRotas.map((val, idx) => (
+                <div key={idx} className="flex gap-2">
+                  <input
+                    className="border rounded px-2 py-1 flex-1"
+                    placeholder={`Rota ${idx + 1} (ex.: A)`}
+                    value={val}
+                    onChange={(e) => updateRotaField(idx, e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    className="px-2 border rounded"
+                    onClick={() => removeRotaField(idx)}
+                    disabled={pRotas.length === 1}
+                    title="Remover"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+              <button
+                type="button"
+                className="self-start px-3 py-1 border rounded"
+                onClick={addRotaField}
+                title="Adicionar rota"
+              >
+                + Adicionar rota
+              </button>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 md:col-span-6">
             <label className="flex items-center gap-2 text-sm">
               <input
                 type="checkbox"
@@ -597,6 +698,7 @@ export default function AdminCadastros() {
             </button>
           </div>
         </form>
+
         {pErro && <div className="text-red-600 text-sm mb-3">{pErro}</div>}
         <p className="text-xs text-gray-500">
           * Gestão (ativar/desativar/deletar/editar) permanece na página
@@ -604,7 +706,7 @@ export default function AdminCadastros() {
         </p>
       </section>
 
-      {/* DIVISÓRIA GRANDE */}
+      {/* DIVISÓRIA */}
       <div className="my-8 border-t-4 border-gray-300 rounded" />
 
       {/* ===== USUÁRIOS ===== */}
@@ -748,7 +850,7 @@ export default function AdminCadastros() {
         )}
       </section>
 
-      {/* DIVISÓRIA GRANDE */}
+      {/* DIVISÓRIA */}
       <div className="my-8 border-t-4 border-gray-300 rounded" />
 
       {/* ===== PRODUTOS ===== */}
@@ -816,13 +918,12 @@ export default function AdminCadastros() {
             value={prodPreco}
             onChange={(e) => setProdPreco(e.target.value)}
           />
-
           <label className="flex items-center gap-2 text-sm px-2">
             <input
               type="checkbox"
               checked={prodAtivo}
               onChange={(e) => setProdAtivo(e.target.checked)}
-            />
+            />{" "}
             Ativo
           </label>
           <button
@@ -867,7 +968,6 @@ export default function AdminCadastros() {
                       <td className="p-2">{p.preco ?? "—"}</td>
                       <td className="p-2">{p.ativo ? "Sim" : "Não"}</td>
                       <td className="p-2 flex gap-2">
-                        {/* edição simples: alterna ativo */}
                         <button
                           className="px-2 py-1 border rounded"
                           onClick={async () => {
@@ -895,7 +995,7 @@ export default function AdminCadastros() {
         )}
       </section>
 
-      {/* DIVISÓRIA GRANDE */}
+      {/* DIVISÓRIA */}
       <div className="my-8 border-t-4 border-gray-300 rounded" />
 
       {/* ===== CLIENTES ===== */}
@@ -968,8 +1068,8 @@ export default function AdminCadastros() {
           >
             <option value="">— Selecione a rota —</option>
             {rotasPadaria.map((r) => (
-              <option key={r._id} value={r.nome}>
-                {r.nome}
+              <option key={r} value={r}>
+                {r}
               </option>
             ))}
           </select>
@@ -1094,7 +1194,7 @@ export default function AdminCadastros() {
         </button>
         {cErro && <div className="text-red-600 text-sm mt-2">{cErro}</div>}
 
-        {/* Lista de clientes recolhível */}
+        {/* Lista de clientes */}
         {mostrarClientes && (
           <div className="mt-6 overflow-auto rounded border">
             <table className="min-w-full text-sm">
@@ -1130,13 +1230,41 @@ export default function AdminCadastros() {
                       <td className="p-2 flex gap-2">
                         <button
                           className="px-2 py-1 border rounded"
-                          onClick={() => {
-                            setCEdit({ ...c });
-                            prepararMatrizEditFromCliente(c);
+                          onClick={async () => {
+                            try {
+                              const d = await obterPadraoCliente(c._id);
+                              const pedidoSemanal = apiToPedido(
+                                d?.padraoSemanal || {}
+                              );
+                              setCView({ ...c, pedidoSemanal });
+                            } catch {
+                              alert("Falha ao carregar padrão semanal.");
+                            }
+                          }}
+                        >
+                          Ver padrão
+                        </button>
+
+                        <button
+                          className="px-2 py-1 border rounded"
+                          onClick={async () => {
+                            try {
+                              const d = await obterPadraoCliente(c._id);
+                              const pedidoSemanal = apiToPedido(
+                                d?.padraoSemanal || {}
+                              );
+                              const cli = { ...c, pedidoSemanal };
+                              setCEdit(cli);
+                              prepararMatrizEditFromCliente(cli);
+                            } catch {
+                              setCEdit({ ...c });
+                              prepararMatrizEditFromCliente(c);
+                            }
                           }}
                         >
                           Editar
                         </button>
+
                         <button
                           className="px-2 py-1 bg-red-600 text-white rounded"
                           onClick={() => onExcluirCliente(c._id)}
@@ -1166,7 +1294,6 @@ export default function AdminCadastros() {
 
       {/* ===== MODAIS ===== */}
 
-      {/* Editar usuário */}
       {uEdit && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
           <div className="bg-white rounded p-4 w-[min(520px,92vw)]">
@@ -1222,7 +1349,6 @@ export default function AdminCadastros() {
         </div>
       )}
 
-      {/* Editar cliente */}
       {cEdit && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
           <div className="bg-white rounded p-4 w-[min(950px,95vw)]">
@@ -1253,11 +1379,12 @@ export default function AdminCadastros() {
               >
                 <option value="">— Selecione a rota —</option>
                 {rotasPadaria.map((r) => (
-                  <option key={r._id} value={r.nome}>
-                    {r.nome}
+                  <option key={r} value={r}>
+                    {r}
                   </option>
                 ))}
               </select>
+
               <input
                 className="border rounded px-2 py-1 md:col-span-2"
                 value={cEdit.endereco}
@@ -1353,6 +1480,283 @@ export default function AdminCadastros() {
                 Salvar
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Picker de produtos — NOVO cliente */}
+      {showProdPicker && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded p-4 w-[min(720px,95vw)]">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="font-semibold">Selecionar produtos</h3>
+              <button
+                className="px-3 py-1 border rounded"
+                onClick={() => setShowProdPicker(false)}
+              >
+                Fechar
+              </button>
+            </div>
+
+            <input
+              className="border rounded px-2 py-1 w-full mb-2"
+              placeholder="Buscar produto…"
+              value={prodSearch}
+              onChange={(e) => setProdSearch(e.target.value)}
+            />
+
+            <div className="max-h-80 overflow-auto border rounded">
+              <table className="min-w-full text-sm">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="p-2 text-center w-12">Sel</th>
+                    <th className="p-2 text-left">Produto</th>
+                    <th className="p-2 text-right w-24">Preço</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {produtosFiltrados.length === 0 ? (
+                    <tr>
+                      <td className="p-2 text-sm text-gray-500" colSpan={3}>
+                        {loadingProdutos
+                          ? "Carregando…"
+                          : "Sem produtos nessa padaria. Cadastre na seção acima."}
+                      </td>
+                    </tr>
+                  ) : (
+                    produtosFiltrados.map((p) => (
+                      <tr key={p._id} className="border-t">
+                        <td className="p-2 text-center">
+                          <input
+                            type="checkbox"
+                            checked={selectedProds.includes(p._id)}
+                            onChange={(e) => {
+                              const checked = e.target.checked;
+                              setSelectedProds((prev) =>
+                                checked
+                                  ? [...prev, p._id]
+                                  : prev.filter((id) => id !== p._id)
+                              );
+                            }}
+                          />
+                        </td>
+                        <td className="p-2">{p.nome}</td>
+                        <td className="p-2 text-right">{p.preco ?? "—"}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="mt-3 flex justify-between">
+              <div className="text-sm text-gray-600">
+                {selectedProds.length} selecionado(s)
+              </div>
+              <div className="flex gap-2">
+                <button
+                  className="px-3 py-1 border rounded"
+                  onClick={() => setSelectedProds([])}
+                >
+                  Limpar
+                </button>
+                <button
+                  className="px-3 py-1 bg-indigo-600 text-white rounded"
+                  onClick={() => setShowProdPicker(false)}
+                >
+                  Concluir
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Picker de produtos — EDITAR cliente */}
+      {showProdPickerEdit && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded p-4 w-[min(720px,95vw)]">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="font-semibold">Selecionar produtos</h3>
+              <button
+                className="px-3 py-1 border rounded"
+                onClick={() => setShowProdPickerEdit(false)}
+              >
+                Fechar
+              </button>
+            </div>
+
+            <input
+              className="border rounded px-2 py-1 w-full mb-2"
+              placeholder="Buscar produto…"
+              value={prodSearchEdit}
+              onChange={(e) => setProdSearchEdit(e.target.value)}
+            />
+
+            <div className="max-h-80 overflow-auto border rounded">
+              <table className="min-w-full text-sm">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="p-2 text-center w-12">Sel</th>
+                    <th className="p-2 text-left">Produto</th>
+                    <th className="p-2 text-right w-24">Preço</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {produtosFiltradosEdit.length === 0 ? (
+                    <tr>
+                      <td className="p-2 text-sm text-gray-500" colSpan={3}>
+                        {loadingProdutos
+                          ? "Carregando…"
+                          : "Sem produtos nessa padaria."}
+                      </td>
+                    </tr>
+                  ) : (
+                    produtosFiltradosEdit.map((p) => (
+                      <tr key={p._id} className="border-t">
+                        <td className="p-2 text-center">
+                          <input
+                            type="checkbox"
+                            checked={selectedProdsEdit.includes(p._id)}
+                            onChange={(e) => {
+                              const checked = e.target.checked;
+                              setSelectedProdsEdit((prev) =>
+                                checked
+                                  ? [...prev, p._id]
+                                  : prev.filter((id) => id !== p._id)
+                              );
+                            }}
+                          />
+                        </td>
+                        <td className="p-2">{p.nome}</td>
+                        <td className="p-2 text-right">{p.preco ?? "—"}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="mt-3 text-right">
+              <button
+                className="px-3 py-1 bg-indigo-600 text-white rounded"
+                onClick={() => setShowProdPickerEdit(false)}
+              >
+                Concluir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Ver padrão semanal (read-only) */}
+      {cView && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded p-4 w-[min(900px,95vw)]">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="font-semibold">Padrão semanal — {cView?.nome}</h3>
+              <button
+                className="px-3 py-1 border rounded"
+                onClick={() => setCView(null)}
+              >
+                Fechar
+              </button>
+            </div>
+
+            {(() => {
+              const mapFullToShort = {
+                domingo: "dom",
+                segunda: "seg",
+                terca: "ter",
+                quarta: "qua",
+                quinta: "qui",
+                sexta: "sex",
+                sabado: "sab",
+              };
+              const shortDias = [
+                "seg",
+                "ter",
+                "qua",
+                "qui",
+                "sex",
+                "sab",
+                "dom",
+              ];
+              const labelDia = {
+                seg: "Seg",
+                ter: "Ter",
+                qua: "Qua",
+                qui: "Qui",
+                sex: "Sex",
+                sab: "Sáb",
+                dom: "Dom",
+              };
+
+              const raw = cView?.pedidoSemanal || cView?.padraoSemanal || {};
+              const ped = {};
+              for (const d of shortDias) ped[d] = [];
+              for (const [k, arr] of Object.entries(raw || {})) {
+                const key = shortDias.includes(k)
+                  ? k
+                  : mapFullToShort[k] || null;
+                if (!key) continue;
+                ped[key] = Array.isArray(arr) ? arr : [];
+              }
+
+              const usedIds = new Set();
+              for (const d of shortDias)
+                for (const it of ped[d])
+                  if (it?.produto) usedIds.add(String(it.produto));
+              const mapaProd = new Map(
+                (produtos || []).map((p) => [String(p._id), p])
+              );
+              const linhas = Array.from(usedIds)
+                .map((id) => ({ id, nome: mapaProd.get(id)?.nome || id }))
+                .sort((a, b) => String(a.nome).localeCompare(String(b.nome)));
+
+              if (linhas.length === 0) {
+                return (
+                  <div className="text-sm text-gray-600">
+                    Nenhum produto no padrão semanal deste cliente.
+                  </div>
+                );
+              }
+
+              return (
+                <div className="overflow-auto border rounded">
+                  <table className="min-w-full text-sm">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="p-2 text-left">Produto</th>
+                        {shortDias.map((d) => (
+                          <th key={d} className="p-2 text-center">
+                            {labelDia[d]}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {linhas.map((l) => (
+                        <tr key={l.id} className="border-t">
+                          <td className="p-2">{l.nome}</td>
+                          {shortDias.map((d) => {
+                            const item = (ped[d] || []).find(
+                              (x) => String(x.produto) === l.id
+                            );
+                            const q = Number(item?.quantidade || 0);
+                            return (
+                              <td key={d} className="p-2 text-center">
+                                {q > 0 ? q : "—"}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })()}
           </div>
         </div>
       )}

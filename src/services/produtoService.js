@@ -1,25 +1,19 @@
-import { http } from "./http";
+import { http, get, post, put, del } from "./http";
 
-/** Lista produtos; pode filtrar por padaria. */
+// GET /produtos?padaria=<id>
 export async function listarProdutos(params = {}) {
-  const { data } = await http.get("/produtos", { params });
-  return Array.isArray(data) ? data : data?.produtos ?? [];
+  const data = await get("/produtos", params);
+  return Array.isArray(data) ? data : data?.produtos ?? data ?? [];
 }
 
-/** Cria produto. Ex.: { padaria, nome, preco?, ativo } */
 export async function criarProduto(payload) {
-  const { data } = await http.post("/produtos", payload);
-  return data;
+  return await post("/produtos", payload);
 }
 
-/** Atualiza produto. Ex.: atualizarProduto(id, { ativo:false }) */
 export async function atualizarProduto(id, payload) {
-  const { data } = await http.patch(`/produtos/${id}`, payload);
-  return data;
+  return await put(`/produtos/${id}`, payload);
 }
 
-/** Exclui produto. */
 export async function excluirProduto(id) {
-  const { data } = await http.delete(`/produtos/${id}`);
-  return data;
+  return await del(`/produtos/${id}`);
 }

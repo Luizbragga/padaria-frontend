@@ -53,3 +53,13 @@ body,
   background-color: #eef2f7; /* cinza claro (estilo slate-100/200) */
   min-height: 100%;
 }
+/* espaça os controles do zoom quando em tela cheia */
+.nav-full .leaflet-left .leaflet-control {
+  margin-left: 8px;
+  margin-bottom: 88px; /* afasta do painel inferior ("Restante/Tempo/Chegada") */
+}
+.nav-full .leaflet-container,
+.nav-full .leaflet-map-pane,
+.nav-full .leaflet-pane {
+  height: 100% !important;
+}

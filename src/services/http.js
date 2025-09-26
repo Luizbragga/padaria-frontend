@@ -2,49 +2,38 @@
 import axios from "axios";
 import { getToken, getRefreshToken, setToken } from "../utils/auth";
 
-// ====== Resolução robusta da base URL ======
-const MODE = import.meta.env.MODE; // "development" | "production" | "preview" ...
-let API_BASE = (import.meta.env.VITE_API_URL || "").trim();
+/* ============ BASE URL PADRONIZADA ============ */
+// Usamos VITE_API_URL (ou VITE_API_HOST) e SEMPRE anexamos "/api/".
+const HOST =
+  (
+    import.meta.env.VITE_API_HOST ||
+    import.meta.env.VITE_API_URL ||
+    ""
+  ).trim() || "http://localhost:4001";
 
-// Em dev/preview locais, force localhost se estiver rodando em 127/localhost
-const isLocalHost =
-  typeof window !== "undefined" &&
-  /^(localhost|127\.0\.0\.1)$/i.test(window.location.hostname);
+// garante 1 barra só entre host e /api/
+const API_BASE = HOST.replace(/\/+$/, "") + "/api/";
 
-// Se o build veio com domínio de produção mas estou em localhost, derrubo para 4001
-if (
-  isLocalHost &&
-  (!API_BASE || /^https?:\/\/api\.seudominio\.com/i.test(API_BASE))
-) {
-  API_BASE = "http://localhost:4001";
-}
-
-// Fallback final de segurança
-if (!API_BASE) {
-  API_BASE = isLocalHost ? "http://localhost:4001" : "/api";
-}
-
-// (opcional) logar uma única vez para conferir o que está indo
-// Remova depois de validar.
+// log
 if (typeof window !== "undefined") {
-  console.log(
-    "[HTTP] MODE:",
-    MODE,
-    "| VITE_API_URL:",
-    import.meta.env.VITE_API_URL,
-    "| usando:",
-    API_BASE
-  );
+  console.log("[HTTP] MODE:", import.meta.env.MODE, "| BASE:", API_BASE);
 }
 
-// ====== Client axios ======
+// Header extra p/ ngrok
+const NEEDS_NGROK_HEADER = /^https:\/\/[a-z0-9-]+\.ngrok-free\.app/i.test(HOST);
+const baseHeaders = NEEDS_NGROK_HEADER
+  ? { "ngrok-skip-browser-warning": "true" }
+  : {};
+
+// cliente axios
 const http = axios.create({
-  baseURL: API_BASE.replace(/\/+$/, ""), // evita barra duplicada
+  baseURL: API_BASE,
   withCredentials: false,
   timeout: 20000,
+  headers: baseHeaders,
 });
 
-// Injeta Bearer token
+// token bearer
 http.interceptors.request.use((config) => {
   const token = getToken();
   if (token) {
@@ -54,9 +43,15 @@ http.interceptors.request.use((config) => {
   return config;
 });
 
-// Refresh automático em 401
-let refreshing = null;
+// helper p/ montar URL absoluta a partir da base do axios
+function buildUrl(path) {
+  const base = http.defaults.baseURL || API_BASE;
+  const u = new URL(path.replace(/^\/+/, ""), base);
+  return u.toString();
+}
 
+/* ============ REFRESH TOKEN ROBUSTO ============ */
+let refreshing = null;
 http.interceptors.response.use(
   (res) => res,
   async (error) => {
@@ -68,16 +63,23 @@ http.interceptors.response.use(
       try {
         if (!refreshing) {
           const refreshToken = getRefreshToken();
-          refreshing = axios.post(`${http.defaults.baseURL}/token/refresh`, {
-            refreshToken,
-          });
+          refreshing = axios.post(
+            buildUrl("token/refresh"),
+            { refreshToken },
+            {
+              headers: baseHeaders,
+              timeout: 15000,
+            }
+          );
         }
         const { data } = await refreshing;
         refreshing = null;
+
         if (data?.token) {
           setToken(data.token);
           original.headers = original.headers || {};
           original.headers.Authorization = `Bearer ${data.token}`;
+          // repete a requisição original usando o mesmo cliente
           return http(original);
         }
       } catch {
@@ -88,19 +90,32 @@ http.interceptors.response.use(
   }
 );
 
-// Helpers
+/* ============ HELPERS BÁSICOS (sempre data) ============ */
+function cleanPath(path = "") {
+  if (typeof path !== "string") return "";
+  let p = path.trim();
+  p = p.replace(/^\/+/, ""); // remove barras iniciais
+  if (p === "api") p = "";
+  else if (p.startsWith("api/")) p = p.slice(4);
+  return p;
+}
+
 async function get(path, params = {}) {
-  const res = await http.get(path, { params });
+  const res = await http.get(cleanPath(path), { params });
   return res?.data ?? null;
 }
 async function post(path, body = {}, options = {}) {
-  const res = await http.post(path, body, options);
+  const res = await http.post(cleanPath(path), body, options);
   return res?.data ?? null;
 }
 async function put(path, body = {}, options = {}) {
-  const res = await http.put(path, body, options);
+  const res = await http.put(cleanPath(path), body, options);
+  return res?.data ?? null;
+}
+async function del(path, options = {}) {
+  const res = await http.delete(cleanPath(path), options);
   return res?.data ?? null;
 }
 
-export { http, get, post, put };
+export { http, get, post, put, del, API_BASE };
 export default http;

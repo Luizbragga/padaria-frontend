@@ -5,9 +5,16 @@ import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 import axios from "axios";
 import { getToken, getUsuario } from "../utils/auth";
+import { API_BASE } from "../services/http";
 
-const API_URL = import.meta.env.VITE_API_URL ?? "";
-
+const buildUrl = (path, params) => {
+  const u = new URL(path.replace(/^\/+/, ""), API_BASE);
+  if (params)
+    Object.entries(params).forEach(
+      ([k, v]) => v != null && u.searchParams.set(k, v)
+    );
+  return u.href;
+};
 // Corrige os ícones padrão do Leaflet (idempotente)
 try {
   // @ts-ignore
@@ -70,11 +77,11 @@ export default function MapaEntregadores({ padariaId }) {
       setErro("");
       const token = getToken();
       const { data } = await axios.get(
-        `${API_URL}/analitico/localizacao-entregadores`,
-        {
-          params: padariaId ? { padaria: padariaId } : {},
-          headers: { Authorization: `Bearer ${token}` },
-        }
+        buildUrl(
+          "analitico/localizacao-entregadores",
+          padariaId ? { padaria: padariaId } : {}
+        ),
+        { headers: { Authorization: `Bearer ${token}` } }
       );
       if (!aliveRef.current) return;
       setEntregadores(normalizaLista(data));

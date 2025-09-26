@@ -1,98 +1,45 @@
-// src/services/padariaService.js
-import axios from "axios";
-import { http } from "./http";
-import { getToken } from "../utils/auth";
+import { get, post, put, del } from "./http";
 
-const API_URL = import.meta.env?.VITE_API_URL || "http://localhost:3000";
-
-function authHeader() {
-  const token = getToken();
-  return { Authorization: `Bearer ${token}` };
-}
-
-/** Lista todas as padarias (admin/gerente) */
 export async function listarPadarias() {
-  const { data } = await axios.get(`${API_URL}/padarias`, {
-    headers: authHeader(),
-  });
-  // backend pode devolver [{...}] ou { padarias:[...] }
-  return Array.isArray(data) ? data : data?.padarias ?? [];
+  const data = await get("/padarias");
+  return Array.isArray(data) ? data : data?.padarias ?? data ?? [];
 }
 
-/**
- * Altera status da padaria
- * acao: "ativar" | "desativar"
- */
-export async function alterarStatusPadaria(id, acao) {
-  if (!["ativar", "desativar"].includes(acao)) {
-    throw new Error("Ação inválida ao alterar status da padaria");
-  }
-  const { data } = await axios.patch(
-    `${API_URL}/padarias/${id}/${acao}`,
-    null,
-    { headers: authHeader() }
-  );
-  return data;
-}
-// (NOVA) criar padaria
-export async function criarPadaria({ nome, cidade, ativa = true }) {
-  const payload = { nome, cidade, ativa };
-  const { data } = await http.post("/padarias", payload);
-  return data;
+export async function criarPadaria(payload) {
+  return await post("/padarias", payload);
 }
 
-export async function atualizarPadaria(id, payload) {
-  const { data } = await http.patch(`/padarias/${id}`, payload);
-  return data;
-}
-/** Deleta uma padaria */
-export async function deletarPadaria(id) {
-  const { data } = await axios.delete(`${API_URL}/padarias/${id}`, {
-    headers: authHeader(),
-  });
-  return data;
-}
-// ------- Rotas (admin) -------
-// ZERO-MOD 2025-09-10: usar /rotas; se o projeto tiver /admin/rotas em outra versão, fazemos fallback
-// ZERO-MOD 2025-09-10: usar /rotas; se não existir, tentar /admin/rotas
+// Lista nomes de rotas da padaria.
+// 1) Tenta /rotas/nomes (rotas reais via clientes)
+// 2) Se vier vazio, usa rotasDisponiveis salvas na padaria
 export async function listarRotasPadaria(padariaId) {
+  const data = await get(`/padarias/${padariaId}/rotas`);
+  const arr = Array.isArray(data) ? data : data?.rotas ?? [];
+  // normaliza: sempre strings MAIÚSCULAS
+  return arr
+    .map((r) => (typeof r === "string" ? r : r?.nome))
+    .filter(Boolean)
+    .map((r) => String(r).toUpperCase());
+}
+
+export async function criarRota(padariaId, payload) {
+  return await post(`/padarias/${padariaId}/rotas`, payload);
+}
+// --- alterar status (ativa/desativa) ---
+export async function alterarStatusPadaria(padariaId, ativo) {
+  if (!padariaId) throw new Error("padariaId é obrigatório");
+  // tentamos um endpoint específico; se não existir, caímos no update padrão
   try {
-    const { data } = await http.get("/rotas", {
-      params: { padaria: padariaId },
+    return await put(`/padarias/${padariaId}/status`, {
+      ativo: Boolean(ativo),
     });
-    return Array.isArray(data) ? data : data?.rotas ?? [];
-  } catch (e) {
-    if (e?.response?.status === 404) {
-      const { data } = await http.get("/admin/rotas", {
-        params: { padaria: padariaId },
-      });
-      return Array.isArray(data) ? data : data?.rotas ?? [];
-    }
-    throw e;
+  } catch (e1) {
+    // fallback para PUT direto na padaria (alguns backends aceitam { ativo } no update)
+    return await put(`/padarias/${padariaId}`, { ativo: Boolean(ativo) });
   }
 }
-
-export async function criarRota({ padaria, nome, ativa = true }) {
-  const { data } = await http.post("/admin/rotas", { padaria, nome, ativa });
-  return data;
-}
-export async function atualizarRota(id, payload) {
-  const { data } = await http.patch(`/admin/rotas/${id}`, payload);
-  return data;
-}
-export async function deletarRota(id) {
-  const { data } = await http.delete(`/admin/rotas/${id}`);
-  return data;
-}
-
-export async function listarRotasNomes(padariaId) {
-  const params = {};
-  if (padariaId) params.padaria = padariaId;
-  try {
-    const { data } = await http.get("/rotas/nomes", { params });
-    return Array.isArray(data) ? data : [];
-  } catch (e) {
-    console.error("listarRotasNomes:", e?.response?.status || e);
-    return [];
-  }
+// --- deletar padaria ---
+export async function deletarPadaria(padariaId) {
+  if (!padariaId) throw new Error("padariaId é obrigatório");
+  return await del(`/padarias/${padariaId}`);
 }

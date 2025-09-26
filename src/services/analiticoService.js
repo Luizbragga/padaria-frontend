@@ -1,5 +1,5 @@
 // src/services/analiticoService.js
-import { http } from "./http";
+import { http } from "./api";
 
 /* Helpers */
 function toArray(x) {
@@ -10,7 +10,7 @@ function toArray(x) {
 export async function buscarEntregasPorDia(padariaId) {
   if (!padariaId) return [];
   try {
-    const { data } = await http.get("/analitico/entregas-por-dia-da-semana", {
+    const { data } = await http.get("analitico/entregas-por-dia-da-semana", {
       params: { padaria: padariaId },
     });
 
@@ -29,7 +29,7 @@ export async function buscarEntregasPorDia(padariaId) {
 export async function buscarFaturamentoMensal(padariaId) {
   if (!padariaId) return [];
   try {
-    const { data } = await http.get("/analitico/faturamento-mensal", {
+    const { data } = await http.get("analitico/faturamento-mensal", {
       params: { padaria: padariaId },
     });
 
@@ -48,7 +48,7 @@ export async function buscarFaturamentoMensal(padariaId) {
 export async function buscarInadimplencia(padariaId) {
   if (!padariaId) return [];
   try {
-    const { data } = await http.get("/analitico/inadimplencia", {
+    const { data } = await http.get("analitico/inadimplencia", {
       params: { padaria: padariaId },
     });
     const pag = Number(data?.pagantes ?? 0);
@@ -70,7 +70,7 @@ export async function buscarAReceber(padariaId, mes) {
     if (padariaId) params.padaria = padariaId;
     if (mes) params.mes = mes;
 
-    const { data } = await http.get("/analitico/a-receber", { params });
+    const { data } = await http.get("analitico/a-receber", { params });
     return data;
   } catch (e) {
     console.error("buscarAReceber:", e);
@@ -85,7 +85,7 @@ export async function listarAvulsasDoMes(padariaId, mes) {
     if (padariaId) params.padaria = padariaId;
     if (mes) params.mes = mes;
 
-    const { data } = await http.get("/analitico/avulsas", { params });
+    const { data } = await http.get("analitico/avulsas", { params });
     // backend: { mes, total, avulsas: [...] }
     return {
       mes: data?.mes ?? mes ?? "",
@@ -167,7 +167,7 @@ export async function buscarPagamentosDoMesCliente(padariaId, clienteId, mes) {
     "0"
   )}`;
 
-  const { data } = await http.get("/analitico/pagamentos", {
+  const { data } = await http.get("analitico/pagamentos", {
     params: {
       padaria: padariaId,
       dataInicial,
@@ -205,7 +205,7 @@ export async function buscarPagamentosDetalhados({
 
   if (forma && forma !== "") params.forma = forma;
 
-  const { data } = await http.get("/analitico/pagamentos", { params });
+  const { data } = await http.get("analitico/pagamentos", { params });
   return data; // { pagamentos, totalRecebido, clientesPagantes }
 }
 
@@ -231,7 +231,7 @@ export async function registrarPagamentoCliente(
 /* =====================  PENDÊNCIAS (NOVO)  ===================== */
 export async function buscarPendenciasAno(padariaId, ano, gracaDia = 8) {
   if (!padariaId) throw new Error("padariaId é obrigatório");
-  const { data } = await http.get("/analitico/pendencias-anuais", {
+  const { data } = await http.get("analitico/pendencias-anuais", {
     params: { padaria: padariaId, ano, gracaDia },
   });
   return data;
@@ -240,7 +240,7 @@ export async function buscarPendenciasAno(padariaId, ano, gracaDia = 8) {
 export async function buscarPendenciasDoMes(padariaId, mes, gracaDia = 8) {
   if (!padariaId) throw new Error("padariaId é obrigatório");
   if (!mes) throw new Error("mes é obrigatório (YYYY-MM)");
-  const { data } = await http.get("/analitico/pendencias-do-mes", {
+  const { data } = await http.get("analitico/pendencias-do-mes", {
     params: { padaria: padariaId, mes, gracaDia },
   });
   return data;

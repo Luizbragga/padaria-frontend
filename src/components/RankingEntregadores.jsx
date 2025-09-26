@@ -2,8 +2,16 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { getUsuario, getToken } from "../utils/auth";
 import axios from "axios";
+import { API_BASE } from "../services/http";
 
-const API_URL = import.meta.env.VITE_API_URL ?? "";
+const buildUrl = (path, params) => {
+  const u = new URL(path.replace(/^\/+/, ""), API_BASE);
+  if (params)
+    Object.entries(params).forEach(
+      ([k, v]) => v != null && u.searchParams.set(k, v)
+    );
+  return u.href;
+};
 
 // aceita vários formatos do backend e padroniza
 function normaliza(data) {
@@ -66,11 +74,8 @@ export default function RankingEntregadores({ padariaId }) {
       try {
         const token = getToken();
         const { data } = await axios.get(
-          `${API_URL}/analitico/entregas-por-entregador`,
-          {
-            params: { padaria: padariaId },
-            headers: { Authorization: `Bearer ${token}` },
-          }
+          buildUrl("analitico/entregas-por-entregador", { padaria: padariaId }),
+          { headers: { Authorization: `Bearer ${token}` } }
         );
         if (!alive.current) return;
         const lista = normaliza(data)
