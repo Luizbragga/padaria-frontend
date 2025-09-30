@@ -9,8 +9,10 @@ const fmtEUR = new Intl.NumberFormat("pt-PT", {
 
 function todayISO() {
   const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d.toISOString().slice(0, 10);
+  // corrige o fuso para produzir YYYY-MM-DD local
+  const tz = d.getTimezoneOffset();
+  const local = new Date(d.getTime() - tz * 60 * 1000);
+  return local.toISOString().slice(0, 10);
 }
 
 export default function SaldoDiarioWidget({ padariaId }) {
@@ -41,6 +43,15 @@ export default function SaldoDiarioWidget({ padariaId }) {
       if (vivo.current) setCarregando(false);
     }
   }
+  useEffect(() => {
+    const onChanged = (e) => {
+      if (e.detail?.padariaId === padariaId && e.detail?.dataISO === dataISO) {
+        carregar(); // recarrega os valores exibidos
+      }
+    };
+    window.addEventListener("saldo:changed", onChanged);
+    return () => window.removeEventListener("saldo:changed", onChanged);
+  }, [padariaId, dataISO]);
 
   useEffect(() => {
     vivo.current = true;
@@ -141,6 +152,8 @@ export default function SaldoDiarioWidget({ padariaId }) {
           setTimeout(() => carregar(), 200);
         }}
         padariaId={padariaId}
+        dataISO={dataISO} // ✅ passa o dia atual
+        onChangeDataISO={setDataISO} // ✅ mantém widget e modal sincronizados
       />
     </>
   );

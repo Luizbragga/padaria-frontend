@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { sd_getSaldo, sd_setSaldo } from "../services/saldoDiarioService";
+import {
+  sd_getSaldo,
+  sd_setSaldo,
+  sd_updateVenda,
+  sd_deleteVenda,
+} from "../services/saldoDiarioService";
 
 const fmtEUR = new Intl.NumberFormat("pt-PT", {
   style: "currency",
@@ -31,21 +36,25 @@ export default function SaldoDiarioModal({
 
   const [carregando, setCarregando] = useState(false);
   const vivo = useRef(true);
+  const loadedRef = useRef(false);
 
   async function carregar() {
     if (!padariaId || !dataISO) return;
     setCarregando(true);
+    loadedRef.current = false; // zera antes de hidratar
     try {
       const resp = await sd_getSaldo({ dataISO, padariaId });
       if (!vivo.current) return;
       setGBase(Number(resp?.gastosBase || 0));
       setFBase(Number(resp?.faturamentoBase || 0));
       setLotes(Array.isArray(resp?.lotes) ? resp.lotes : []);
+      loadedRef.current = true; // ✅ marca como carregado no sucesso
     } catch {
       if (!vivo.current) return;
       setGBase(0);
       setFBase(0);
       setLotes([]);
+      loadedRef.current = true; // permite salvar mesmo se não havia nada
     } finally {
       if (vivo.current) setCarregando(false);
     }
@@ -60,9 +69,12 @@ export default function SaldoDiarioModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, padariaId, dataISO]);
 
-  // Sempre que lotes/base mudarem, persiste e avisa o widget
+  // Persistência (único efeito): salva no localStorage após carregar e a cada alteração
   useEffect(() => {
     if (!padariaId || !dataISO) return;
+    if (!open) return;
+    if (!loadedRef.current) return;
+
     sd_setSaldo({
       padariaId,
       dataISO,
@@ -75,13 +87,76 @@ export default function SaldoDiarioModal({
         new CustomEvent("saldo:changed", { detail: { padariaId, dataISO } })
       );
     });
-  }, [lotes, gBase, fBase, padariaId, dataISO]);
+  }, [lotes, gBase, fBase, padariaId, dataISO, open]);
 
   // Totais apenas dos lotes (custos e receita de vendas)
   const gastosLotes = useMemo(
     () => lotes.reduce((s, l) => s + (Number(l.custoTotal) || 0), 0),
     [lotes]
   );
+
+  // Lista achatada de vendas para mostrar/editar
+  const vendasDoDia = useMemo(() => {
+    return lotes.flatMap((l) =>
+      (Array.isArray(l.vendas) ? l.vendas : []).map((v, idx) => ({
+        loteId: l.id,
+        idx, // índice dentro de l.vendas
+        produto: l.produto,
+        qtd: Number(v.qtd) || 0,
+        valor: Number(v.valor) || 0, // total (não unitário)
+        custoUnit: Number(l.custoUnit) || 0,
+      }))
+    );
+  }, [lotes]);
+
+  function editarVenda({ loteId, idx }) {
+    const l = lotes.find((x) => x.id === loteId);
+    if (!l) return;
+    const venda = l.vendas[idx];
+    const padrao = String(Number(venda?.valor ?? 0).toFixed(2)).replace(
+      ".",
+      ","
+    );
+
+    const resp = window.prompt("Novo valor TOTAL da venda (€)", padrao);
+    if (resp == null) return;
+
+    const novo = Number(String(resp).replace(",", "."));
+    if (!Number.isFinite(novo) || novo < 0) {
+      alert("Valor inválido.");
+      return;
+    }
+
+    setLotes((prev) =>
+      prev.map((ll) => {
+        if (ll.id !== loteId) return ll;
+        const vendas = ll.vendas.slice();
+        vendas[idx] = { ...vendas[idx], valor: novo };
+        return { ...ll, vendas };
+      })
+    );
+  }
+
+  function excluirVenda({ loteId, idx }) {
+    const ok = window.confirm(
+      "Excluir esta venda? Isso devolve a quantidade ao estoque do lote."
+    );
+    if (!ok) return;
+
+    setLotes((prev) =>
+      prev.map((ll) => {
+        if (ll.id !== loteId) return ll;
+        const vendas = ll.vendas.slice();
+        const vendida = Number(vendas[idx]?.qtd) || 0;
+        vendas.splice(idx, 1);
+        return {
+          ...ll,
+          vendas,
+          vendidos: Math.max(0, (ll.vendidos || 0) - vendida),
+        };
+      })
+    );
+  }
 
   const receitaLotes = useMemo(
     () =>
@@ -433,6 +508,61 @@ export default function SaldoDiarioModal({
               </tbody>
             </table>
           </div>
+        </div>
+
+        {/* Vendas do dia */}
+        <div className="p-4 pt-2">
+          <div className="mb-2 font-semibold">Vendas do dia</div>
+
+          {vendasDoDia.length === 0 ? (
+            <div className="text-sm text-gray-500">
+              Nenhuma venda registrada.
+            </div>
+          ) : (
+            <div className="overflow-auto rounded border">
+              <table className="min-w-full text-sm">
+                <thead className="bg-gray-50 text-gray-600">
+                  <tr>
+                    <th className="px-3 py-2 text-left">Produto</th>
+                    <th className="px-3 py-2 text-right">Qtd</th>
+                    <th className="px-3 py-2 text-right">Valor (total €)</th>
+                    <th className="px-3 py-2 text-right">Custo unit. (€)</th>
+                    <th className="px-3 py-2 text-center">Ação</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {vendasDoDia.map((v) => (
+                    <tr key={`${v.loteId}-${v.idx}`} className="border-t">
+                      <td className="px-3 py-2">{v.produto}</td>
+                      <td className="px-3 py-2 text-right">{v.qtd}</td>
+                      <td className="px-3 py-2 text-right">
+                        {fmtEUR.format(v.valor)}
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        {fmtEUR.format(v.custoUnit)}
+                      </td>
+                      <td className="px-3 py-2">
+                        <div className="flex items-center justify-center gap-2">
+                          <button
+                            className="px-2 py-1 rounded bg-amber-500 text-white hover:bg-amber-600"
+                            onClick={() => editarVenda(v)}
+                          >
+                            Editar
+                          </button>
+                          <button
+                            className="px-2 py-1 rounded bg-red-600 text-white hover:bg-red-700"
+                            onClick={() => excluirVenda(v)}
+                          >
+                            Excluir
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -79,3 +79,21 @@ export async function sd_setSaldo({
   localStorage.setItem(KEY(padariaId, dataISO), JSON.stringify(payload));
   return payload;
 }
+export async function sd_updateVenda(
+  vendaId,
+  { data, precoVenda, custoUnitario }
+) {
+  const { data: resp } = await http.patch(`saldo-diario/venda/${vendaId}`, {
+    data,
+    precoVenda,
+    custoUnitario,
+  });
+  return resp;
+}
+
+export async function sd_deleteVenda(vendaId, { data }) {
+  const { data: resp } = await http.delete(`saldo-diario/venda/${vendaId}`, {
+    params: { data },
+  });
+  return resp;
+}
