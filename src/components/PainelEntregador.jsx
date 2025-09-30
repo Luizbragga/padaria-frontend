@@ -493,7 +493,7 @@ export default function PainelEntregador() {
                               onClick={() =>
                                 setMostrarFormulario((prev) => ({
                                   ...prev,
-                                  [id]: true,
+                                  [id]: !prev[id],
                                 }))
                               }
                             >
@@ -529,6 +529,75 @@ export default function PainelEntregador() {
                             >
                               Navegar até aqui
                             </button>
+                            {/* FORMULÁRIO DE PAGAMENTO (aparece quando clicar em "Pagamento") */}
+                            {mostrarFormulario[id] && (
+                              <div className="mt-2 p-2 rounded border bg-gray-50 flex items-center gap-2 flex-wrap">
+                                <input
+                                  type="number"
+                                  step="0.01"
+                                  inputMode="decimal"
+                                  placeholder="Valor recebido"
+                                  value={valoresPagamentos[id] ?? ""}
+                                  onChange={(ev) =>
+                                    setValoresPagamentos((m) => ({
+                                      ...m,
+                                      [id]: ev.target.value,
+                                    }))
+                                  }
+                                  className="w-32 px-2 py-1 rounded border bg-white"
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") {
+                                      registrarPagamento(
+                                        id,
+                                        valoresPagamentos[id],
+                                        obsPagamentos[id]
+                                      );
+                                    }
+                                  }}
+                                />
+
+                                <select
+                                  value={obsPagamentos[id] ?? "dinheiro"}
+                                  onChange={(ev) =>
+                                    setObsPagamentos((m) => ({
+                                      ...m,
+                                      [id]: ev.target.value,
+                                    }))
+                                  }
+                                  className="px-2 py-1 rounded border bg-white"
+                                  title="Forma de pagamento"
+                                >
+                                  <option value="dinheiro">Dinheiro</option>
+                                  <option value="cartao">Cartão</option>
+                                  <option value="mbway">MB Way</option>
+                                </select>
+
+                                <button
+                                  className="px-3 py-1 rounded bg-yellow-400 text-black"
+                                  onClick={() =>
+                                    registrarPagamento(
+                                      id,
+                                      valoresPagamentos[id],
+                                      obsPagamentos[id]
+                                    )
+                                  }
+                                >
+                                  Confirmar
+                                </button>
+
+                                <button
+                                  className="px-3 py-1 rounded border"
+                                  onClick={() =>
+                                    setMostrarFormulario((prev) => ({
+                                      ...prev,
+                                      [id]: false,
+                                    }))
+                                  }
+                                >
+                                  Cancelar
+                                </button>
+                              </div>
+                            )}
                           </>
                         )}
                       </div>

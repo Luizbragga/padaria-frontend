@@ -16,11 +16,13 @@ import {
   listarMinhasEntregas,
   concluirEntrega,
   registrarPagamento,
+  relatarProblema,
 } from "../services/entregaService";
+
 import { routeMulti } from "../services/tomtomService";
 
 /* =================== CONFIG =================== */
-const BOTTOM_UI_PX = 140;
+const BOTTOM_UI_PX = 180;
 const WHOLE_ROUTE_TIMEOUT_MS = 60000;
 const DEFAULT_ZOOM_LOCAL = 17;
 const DEFAULT_ZOOM_WIDE = 7;
@@ -405,7 +407,12 @@ export default function NavegacaoWaze() {
               mapRef.current.setView([next.lat, next.lng], z, {
                 animate: false,
               });
-              panWithBottomPadding(mapRef.current, p.lat, p.lng, BOTTOM_UI_PX);
+              panWithBottomPadding(
+                mapRef.current,
+                next.lat,
+                next.lng,
+                BOTTOM_UI_PX
+              );
             }
           }
         }
@@ -605,6 +612,25 @@ export default function NavegacaoWaze() {
       alert("Falha ao registrar pagamento.");
     }
   }
+  async function acaoRelatarProblema(id) {
+    try {
+      const tipo = window.prompt(
+        "Tipo do problema (ex.: Falha na carrinha, Endereço incorreto, Pagamento recusado, Outro):",
+        "Falha na carrinha"
+      );
+      if (!tipo) return;
+
+      const descricao = window.prompt("Descrição breve do ocorrido:", "");
+      if (!descricao) return;
+
+      await relatarProblema(id, { tipo, descricao });
+
+      // opcional: não removo a parada; apenas aviso o usuário
+      alert("Problema registrado. O gerente verá nas Notificações Recentes.");
+    } catch (e) {
+      alert("Falha ao relatar problema.");
+    }
+  }
 
   const remainingDistance = useMemo(() => {
     if (!navSteps.length) return 0;
@@ -626,6 +652,19 @@ export default function NavegacaoWaze() {
   const totalParadas = initialTotalRef.current || 0;
   const pendentes = orderedStops.length || 0;
   const feitas = Math.max(0, totalParadas - pendentes);
+
+  // atrasadas = paradas restantes com horaPrevista anterior a agora
+  const atrasadas = useMemo(() => {
+    const now = Date.now();
+    return (orderedStops || []).filter((p) => {
+      const e = p?.entrega || {};
+      if (e?.entregue) return false;
+      const dt = e?.horaPrevista ? new Date(e.horaPrevista) : null;
+      return (
+        dt instanceof Date && !Number.isNaN(dt.getTime()) && dt.getTime() < now
+      );
+    }).length;
+  }, [orderedStops]);
 
   return (
     <div className="fixed inset-0 z-[100] bg-black">
@@ -664,64 +703,51 @@ export default function NavegacaoWaze() {
         </button>
       )}
 
-      <div className="absolute bottom-3 left-3 right-3 z-[101] flex items-center justify-between gap-2 flex-wrap">
-        <div className="flex items-center gap-2">
-          <div className="px-2 py-1 text-xs rounded border bg-white/95 shadow">
-            <b>Restante:</b> {Math.round(remainingDistance)} m
+      <div className="absolute bottom-3 left-3 right-3 z-[101] flex items-end justify-between gap-2 flex-wrap">
+        {/* Cards (igual PainelEntregador) */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <div className="p-2 rounded border bg-white/95 shadow">
+            <div className="text-[11px] font-bold text-gray-500">Total</div>
+            <div className="text-lg font-bold">{totalParadas}</div>
           </div>
-          <div className="px-2 py-1 text-xs rounded border bg-white/95 shadow">
-            <b>Tempo:</b> {Math.round(remainingDuration / 60)} min
+
+          <div className="p-2 rounded border bg-white/95 shadow ring-1 ring-green-300">
+            <div className="text-[11px] font-bold text-gray-500">Feitas</div>
+            <div className="text-lg font-bold text-green-600">{feitas}</div>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="px-2 py-1 text-xs rounded border bg-white/95 shadow">
-              <b>Restante:</b> {Math.round(remainingDistance)} m
-            </div>
-            <div className="px-2 py-1 text-xs rounded border bg-white/95 shadow">
-              <b>Tempo:</b> {Math.round(remainingDuration / 60)} min
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="px-2 py-1 text-xs rounded border bg-white/95 shadow">
-                <b>Total:</b> {totalParadas}
-              </div>
-              <div className="px-2 py-1 text-xs rounded border bg-white/95 shadow">
-                <b>Feitas:</b> {feitas}
-              </div>
-              <div className="px-2 py-1 text-xs rounded border bg-white/95 shadow">
-                <b>Pendentes:</b> {pendentes}
-              </div>
-            </div>
+
+          <div className="p-2 rounded border bg-white/95 shadow ring-1 ring-yellow-300">
+            <div className="text-[11px] font-bold text-gray-500">Pendentes</div>
+            <div className="text-lg font-bold text-yellow-600">{pendentes}</div>
+          </div>
+
+          <div className="p-2 rounded border bg-white/95 shadow ring-1 ring-red-300">
+            <div className="text-[11px] font-bold text-gray-500">Atrasadas</div>
+            <div className="text-lg font-bold text-red-600">{atrasadas}</div>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+
+        {/* FABs: Recentrar / Fechar */}
+        <div className="fixed right-3 bottom-20 z-[103] flex flex-col gap-2">
           <button
-            className="px-3 py-1 text-xs rounded bg-white/95 shadow border"
+            className="px-4 py-3 text-sm rounded-full bg-white/95 border shadow-lg hover:shadow-xl active:scale-[0.98] transition"
             onClick={() => {
               if (!mapRef.current) return;
               setCameraMode("follow");
               const p = myPos || lastGoodPosRef.current;
               if (!p) return;
-              const z = Math.max(
-                mapRef.current.getZoom() || 0,
-                DEFAULT_ZOOM_LOCAL
-              );
 
-              // centraliza no ponto e aplica apenas UM deslocamento (pixels)
+              // sempre volta pro zoom padrão (mesmo se estiver muito aproximado)
+              const z = DEFAULT_ZOOM_LOCAL;
               mapRef.current.setView([p.lat, p.lng], z, { animate: false });
               panWithBottomPadding(mapRef.current, p.lat, p.lng, BOTTOM_UI_PX);
-
-              const currentPt = mapRef.current.latLngToContainerPoint([
-                p.lat,
-                p.lng,
-              ]);
-              const desiredPt = L.point(size.x / 2, size.y * TOP_FACTOR);
-              const offset = desiredPt.subtract(currentPt);
-              mapRef.current.panBy(offset.multiplyBy(-1), { animate: false });
             }}
           >
             Recentrar
           </button>
+
           <button
-            className="px-3 py-1 text-xs rounded bg-black text-white/90 shadow"
+            className="px-4 py-3 text-sm rounded-full bg-black text-white shadow-lg hover:shadow-xl active:scale-[0.98] transition"
             onClick={() => navigate(-1)}
           >
             Fechar
@@ -853,6 +879,19 @@ export default function NavegacaoWaze() {
                     }}
                   >
                     Navegar até aqui
+                  </button>
+
+                  <button
+                    onClick={() => acaoRelatarProblema(p.id)}
+                    style={{
+                      padding: "6px 10px",
+                      borderRadius: 8,
+                      background: "#ef4444",
+                      color: "#fff",
+                      border: 0,
+                    }}
+                  >
+                    Relatar problema
                   </button>
                 </div>
 
