@@ -1,13 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { http } from "../services/http";
-import {
-  getToken,
-  getRole,
-  isTokenExpirado,
-  getRefreshToken,
-  setToken,
-} from "../utils/auth";
+import { getToken, getRole, isTokenExpirado, setToken } from "../utils/auth";
 
 export default function ProtectedRoute({
   children,
@@ -57,18 +51,9 @@ export default function ProtectedRoute({
       // 2) Expirou → tenta renovar UMA vez
       if (!triedRefresh.current) {
         triedRefresh.current = true;
-        const refreshToken = getRefreshToken();
-        if (!refreshToken) {
-          if (alive) {
-            setAllow(false);
-            setReady(true);
-          }
-          return;
-        }
-
         try {
-          // <<< IMPORTANTE: singular
-          const { data } = await http.post("token/refresh", { refreshToken });
+          // tenta renovar sem enviar refreshToken; cookie httpOnly será usado
+          const { data } = await http.post("token/refresh");
 
           if (!alive) return;
 

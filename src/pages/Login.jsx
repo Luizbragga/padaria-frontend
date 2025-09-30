@@ -27,7 +27,7 @@ export default function Login() {
       // Esperado do backend:
       // { token, refreshToken, usuario:{ id, nome, role, padaria? } }
       localStorage.setItem("token", dados.token);
-      localStorage.setItem("refreshToken", dados.refreshToken);
+      // não salvamos mais o refreshToken; ele está no cookie HttpOnly
       localStorage.setItem("usuario", JSON.stringify(dados.usuario));
 
       navigate("/painel");

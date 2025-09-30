@@ -3,9 +3,9 @@
 export const getToken = () => localStorage.getItem("token") || null;
 export const setToken = (t) => localStorage.setItem("token", t);
 
-export const getRefreshToken = () =>
-  localStorage.getItem("refreshToken") || null;
-export const setRefreshToken = (rt) => localStorage.setItem("refreshToken", rt);
+// refresh tokens agora são gerenciados via cookie httpOnly
+export const getRefreshToken = () => null;
+export const setRefreshToken = (_rt) => {};
 
 // Exemplo de verificação simples de expiração a partir do payload do JWT
 export const isTokenExpirado = () => {

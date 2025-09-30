@@ -1,6 +1,6 @@
 // src/services/http.js
 import axios from "axios";
-import { getToken, getRefreshToken, setToken } from "../utils/auth";
+import { getToken, setToken } from "../utils/auth";
 
 /* ============ BASE URL PADRONIZADA ============ */
 // Usamos VITE_API_URL (ou VITE_API_HOST) e SEMPRE anexamos "/api/".
@@ -28,7 +28,7 @@ const baseHeaders = NEEDS_NGROK_HEADER
 // cliente axios
 const http = axios.create({
   baseURL: API_BASE,
-  withCredentials: false,
+  withCredentials: true,
   timeout: 20000,
   headers: baseHeaders,
 });
@@ -62,11 +62,12 @@ http.interceptors.response.use(
       original._retry = true;
       try {
         if (!refreshing) {
-          const refreshToken = getRefreshToken();
+          // chama o endpoint de refresh sem enviar refreshToken; o cookie httpOnly será usado
           refreshing = axios.post(
             buildUrl("token/refresh"),
-            { refreshToken },
+            {},
             {
+              withCredentials: true,
               headers: baseHeaders,
               timeout: 15000,
             }
