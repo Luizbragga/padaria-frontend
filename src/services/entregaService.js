@@ -64,6 +64,19 @@ export async function registrarPagamento(id, { valor, forma }) {
     throw e;
   }
 }
+export async function relatarProblema(id, { tipo, descricao }) {
+  if (!id) return null;
+  try {
+    const { data } = await http.post(`entregas/${id}/relatar-problema`, {
+      tipo,
+      descricao,
+    });
+    return data;
+  } catch (e) {
+    console.error("relatarProblema:", e);
+    throw e;
+  }
+}
 
 /**
  * ✅ Registrar pagamento direto para um CLIENTE (uso do gerente)
