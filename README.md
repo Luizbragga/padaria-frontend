@@ -1,3 +1,6 @@
+> ⚠️ Este repositório foi movido para monorepo:
+> https://github.com/Luizbragga/Projeto-rotas-de-paes/tree/main/padaria-frontend
+
 # Padaria Frontend
 
 Este é o frontend do sistema de entregas recorrentes para padarias.  
